@@ -1,20 +1,9 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
-import Settings from "./components/Settings.jsx";
-import StockActMonitor from "./components/StockActMonitor.jsx";
-import DarkMoneyTracker from "./components/DarkMoneyTracker.jsx";
-import CompanyProfile from "./components/CompanyProfile.jsx";
-import AccountabilityIndex from "./components/AccountabilityIndex.jsx";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Cell, ScatterChart, Scatter, ZAxis, ComposedChart,
 } from "recharts";
-import {
-  queryAgent,
-  fetchContracts,
-  fetchSpendingNews,
-  fetchAgencySpending,
-} from "./api/client.js";
 
 // ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
 const ORANGE = "#FF8000";
@@ -254,25 +243,10 @@ function hg(t) {
 }
 
 // ─── TICKER ───────────────────────────────────────────────────────────────────
-const TICKER_FALLBACK = "● FEC FILING — $12M DARK MONEY Q1 2025          ● STOCK ACT — 3 NEW FLAGS DETECTED          ● CONTRACT — $4.2BN DOD SOLE-SOURCE AWARD          ● FTC ANTITRUST COMMENT: 4 DAYS REMAINING          ● TOP 5 DEFENCE PACS: $18BN THIS CYCLE          ● FORMER FDA HEAD JOINS PFIZER BOARD          ● GAO: DOD AUDIT FAILURE — 6TH CONSECUTIVE YEAR";
-
 function Ticker() {
   const t = useT();
   const [x, setX] = useState(0);
-  const [txt, setTxt] = useState(TICKER_FALLBACK);
-
-  // Fetch live RSS feed; fall back to hardcoded text if unavailable
-  useEffect(() => {
-    fetchSpendingNews(14).then(res => {
-      if (res.success && res.items?.length > 0) {
-        const live = res.items
-          .map(item => `● ${item.source || item.type || "INTEL"}: ${item.text}`)
-          .join("          ");
-        setTxt(live);
-      }
-    }).catch(() => { /* keep fallback */ });
-  }, []);
-
+  const txt = "● FEC FILING — $12M DARK MONEY Q1 2025          ● STOCK ACT — 3 NEW FLAGS DETECTED          ● CONTRACT — $4.2BN DOD SOLE-SOURCE AWARD          ● FTC ANTITRUST COMMENT: 4 DAYS REMAINING          ● TOP 5 DEFENCE PACS: $18BN THIS CYCLE          ● FORMER FDA HEAD JOINS PFIZER BOARD          ● GAO: DOD AUDIT FAILURE — 6TH CONSECUTIVE YEAR";
   useEffect(() => {
     const id = setInterval(() => setX(v => v + 0.55), 24);
     return () => clearInterval(id);
@@ -280,7 +254,7 @@ function Ticker() {
   const W = txt.length * 7;
   return (
     <div style={{ height:26, background:t.tickerBg, borderBottom:`1px solid ${t.border}`, display:"flex", alignItems:"center", overflow:"hidden", position:"relative" }}>
-      <div style={{ background:BLUE, height:"100%", display:"flex", alignItems:"center", padding:"0 13px", flexShrink:0, zIndex:2 }}>
+      <div style={{ background:ORANGE, height:"100%", display:"flex", alignItems:"center", padding:"0 13px", flexShrink:0, zIndex:2 }}>
         <span style={{ fontFamily:MF, fontSize:8.5, color:WHITE, letterSpacing:2 }}>LIVE</span>
       </div>
       <div style={{ flex:1, overflow:"hidden" }}>
@@ -296,40 +270,6 @@ function Ticker() {
 // ─── OVERVIEW ─────────────────────────────────────────────────────────────────
 function Overview() {
   const t = useT();
-  const [liveContracts, setLiveContracts] = useState(null);
-
-  useEffect(() => {
-    fetchContracts({ limit: 50 })
-      .then(res => { if (res.success) setLiveContracts(res); })
-      .catch(() => {});
-  }, []);
-
-  const totalSpend = liveContracts
-    ? liveContracts.data.reduce((s, c) => s + parseFloat(c["Award Amount"] || 0), 0)
-    : null;
-  const flaggedCount = liveContracts
-    ? liveContracts.data.filter(c => parseFloat(c["Award Amount"] || 0) >= 5e8).length
-    : null;
-
-  function fmtK(n) {
-    if (n == null) return null;
-    if (n >= 1e12) return `$${(n/1e12).toFixed(1)}T`;
-    if (n >= 1e9)  return `$${(n/1e9).toFixed(1)}bn`;
-    if (n >= 1e6)  return `$${(n/1e6).toFixed(0)}m`;
-    return `$${n.toFixed(0)}`;
-  }
-
-  const kpis = [
-    { v: fmtK(totalSpend) || "$157bn",
-      d: totalSpend != null ? "Contract obligations loaded" : "Overspent vs. appropriations",
-      s: liveContracts?.fiscalYear ? `FY${liveContracts.fiscalYear} · live · USASpending.gov` : "FY2024 federal agencies" },
-    { v: flaggedCount != null ? String(flaggedCount) : "1,847",
-      d: flaggedCount != null ? "Contracts ≥ $500M flagged" : "Contracts flagged anomalous",
-      s: flaggedCount != null ? `From ${liveContracts?.count || liveContracts?.data?.length} loaded` : "Across 23 federal agencies" },
-    { v:"34",     d:"STOCK Act potential violations", s:"Current congressional session" },
-    { v:"$18bn",  d:"PAC donations to Congress",      s:"2023–24 election cycle"        },
-  ];
-
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:22 }}>
       <div style={{ borderTop:`3px solid ${ORANGE}`, paddingTop:16 }}>
@@ -341,7 +281,12 @@ function Overview() {
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", borderTop:`1px solid ${t.border}`, borderBottom:`1px solid ${t.border}` }}>
-        {kpis.map((k,i) => (
+        {[
+          { v:"$157bn", d:"Overspent vs. appropriations",  s:"FY2024 federal agencies"      },
+          { v:"1,847",  d:"Contracts flagged anomalous",   s:"Across 23 federal agencies"   },
+          { v:"34",     d:"STOCK Act potential violations",s:"Current congressional session" },
+          { v:"$18bn",  d:"PAC donations to Congress",     s:"2023–24 election cycle"        },
+        ].map((k,i) => (
           <div key={i} style={{ padding:"18px 20px", borderRight:i<3?`1px solid ${t.border}`:"none" }}>
             <div style={{ fontFamily:SF, fontSize:34, color:t.kpiNum, lineHeight:1, marginBottom:5 }}>{k.v}</div>
             <div style={{ fontFamily:MF, fontSize:10.5, color:t.hi, marginBottom:3 }}>{k.d}</div>
@@ -596,55 +541,18 @@ function PolicyIntel() {
 
   useEffect(() => { bottom.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs, thinking]);
 
-  const send = async () => {
+  const send = () => {
     if (!input.trim()) return;
     const q = input; setInput(""); setThinking(true);
     setMsgs(m => [...m, { role:"user", text:q }]);
-    try {
-      const res = await queryAgent(q);
-      const d = res.data || {};
-      const findings = [];
-      if (Array.isArray(d.policyResults) && d.policyResults.length > 0) {
-        d.policyResults.slice(0,3).forEach(p => {
-          findings.push({
-            id:     (p.url||"").split("/").slice(-1)[0]?.slice(0,14) || "RULE",
-            title:  (p.title||"Policy Finding").slice(0,70),
-            date:   p.date || new Date().toLocaleDateString(),
-            detail: `${p.agency||"Federal Agency"}: ${(p.abstract||p.type||"Regulatory action").slice(0,140)}`,
-            risk:   p.significant?"HIGH":"MED",
-          });
-        });
-      }
-      if (Array.isArray(d.findings) && d.findings.length > 0) {
-        d.findings.slice(0,2).forEach(f => {
-          findings.push({
-            id:     (f.company||"FINDING").slice(0,12),
-            title:  (f.pattern||"Pattern Detected").slice(0,60),
-            date:   new Date().toLocaleDateString(),
-            detail: [f.company,f.spendingAmount,f.policyLink].filter(Boolean).join(" · ").slice(0,140) || d.summary || "",
-            risk:   f.confidence==="HIGH"?"HIGH":"MED",
-          });
-        });
-      }
-      if (findings.length === 0) {
-        findings.push({ id:"RESULT", title:"Analysis complete", date:new Date().toLocaleDateString(),
-          detail: d.summary || "Query processed. No matching records found in current federal data sources.", risk:"MED" });
-      }
-      setMsgs(m => [...m, { role:"ai",
-        findings,
-        signal:  d.inference || d.plan?.corruptionFocus || "Query processed across available federal data sources.",
-        sources: d.sources || ["FEC","USASpending.gov","FederalRegister.gov"],
-      }]);
-    } catch(e) {
-      setMsgs(m => [...m, { role:"ai",
-        findings:[{ id:"ERROR", title:"Agent unavailable", date:new Date().toLocaleDateString(),
-          detail:`Unable to reach the intelligence backend. Ensure the server is running on port 3001. (${e.message})`, risk:"MED" }],
-        signal:"Ensure the backend server is running on port 3001.",
-        sources:[],
-      }]);
-    } finally {
+    setTimeout(() => {
       setThinking(false);
-    }
+      setMsgs(m => [...m, { role:"ai",
+        findings:[{ id:"Analysis", title:`Results for: "${q}"`, date:new Date().toLocaleDateString(), detail:"9 entities matched across 4 data sources. Cross-source correlation: 0.91. See Spending Audit tab for breakdown.", risk:"MED" }],
+        signal:"Analytical inference only — not a legal conclusion.",
+        sources:["FEC","USASpending","FedReg","GovInfo"],
+      }]);
+    }, 2400);
   };
 
   return (
@@ -1047,16 +955,12 @@ function Corporate() {
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const TABS = [
-  { id:"overview",       label:"Overview"              },
-  { id:"donors",         label:"Donor Intelligence"    },
-  { id:"policy",         label:"Policy Intelligence"   },
-  { id:"donorweb",       label:"Donor Web"             },
-  { id:"spending",       label:"Spending Audit"        },
-  { id:"corporate",      label:"Corporate"             },
-  { id:"stockact",       label:"STOCK Act Monitor",    phase:3 },
-  { id:"darkmoney",      label:"Dark Money",           phase:3 },
-  { id:"accountability", label:"Accountability Index", phase:3 },
-  { id:"companyprofile", label:"Company Profile",      phase:3 },
+  { id:"overview",  label:"Overview"            },
+  { id:"donors",    label:"Donor Intelligence"  },
+  { id:"policy",    label:"Policy Intelligence" },
+  { id:"donorweb",  label:"Donor Web"           },
+  { id:"spending",  label:"Spending Audit"      },
+  { id:"corporate", label:"Corporate"           },
 ];
 
 // ─── ANALYST PANEL ────────────────────────────────────────────────────────────
@@ -1151,55 +1055,25 @@ function AnalystPanel({ onClose, dark }) {
     }));
 
     try {
-      const res = await queryAgent(q);
-      const d = res.data || {};
-      // If backend already returned analyst-panel format, use it directly
-      let parsed;
-      if (d.routing && d.findings) {
-        parsed = d;
-      } else {
-        // Adapt orchestrator output into analyst-panel card format
-        const findings = [];
-        if (Array.isArray(d.policyResults) && d.policyResults.length > 0) {
-          d.policyResults.slice(0,3).forEach(p => findings.push({
-            agent:"policy",
-            headline: (p.title||"Policy Finding").slice(0,80),
-            detail: `${p.agency||"Federal Agency"}: ${(p.abstract||p.type||"Regulatory action").slice(0,200)}`,
-            risk: p.significant?"HIGH":"MED",
-            sources:[p.url||"FederalRegister.gov"],
-          }));
-        }
-        if (Array.isArray(d.findings) && d.findings.length > 0) {
-          d.findings.slice(0,3).forEach(f => findings.push({
-            agent:"corruption",
-            headline:(f.pattern||"Pattern Detected").slice(0,80),
-            detail:[f.company,f.spendingAmount,f.policyLink].filter(Boolean).join(" · ").slice(0,200)||d.summary||"",
-            risk:f.confidence==="HIGH"?"HIGH":"MED",
-            sources:["FEC","USASpending.gov"],
-          }));
-        }
-        if (findings.length === 0) findings.push({
-          agent:"orchestrator", headline:"Analysis complete",
-          detail: d.summary||"Query processed. No high-confidence findings detected in current federal data.",
-          risk:"INFO", sources:d.sources||["FEC","USASpending.gov","FederalRegister.gov"],
-        });
-        parsed = {
-          routing: d.plan ? [
-            { agent:"policy",   reason:d.plan.regulatoryFocus||"Searching federal regulations" },
-            { agent:"spending", reason:d.plan.spendingFocus  ||"Querying spending data"         },
-          ] : [{ agent:"orchestrator", reason:"Direct query" }],
-          findings,
-          signal:     d.inference||d.plan?.corruptionFocus||"Cross-source analysis complete.",
-          disclaimer: "Analytical inference only — not a legal conclusion.",
-        };
-      }
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          system: SYSTEM_PROMPT,
+          messages:[...history, { role:"user", content:q }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.find(b => b.type==="text")?.text || "";
+      const parsed = parseResponse(raw);
       setMsgs(m => [...m, { role:"assistant", data:parsed }]);
     } catch(e) {
       setMsgs(m => [...m, { role:"assistant", data:{
         routing:[{ agent:"orchestrator", reason:"Error routing query" }],
-        findings:[{ agent:"orchestrator", headline:"Backend unavailable",
-          detail:`Unable to reach intelligence backend on port 3001. (${e.message})`, risk:"INFO", sources:[] }],
-        signal:"", disclaimer:"",
+        findings:[{ agent:"orchestrator", headline:"Connection error", detail:"Unable to reach the intelligence API. Please try again.", risk:"INFO", sources:[] }],
+        signal:"", disclaimer:""
       }}]);
     }
     setLoading(false);
@@ -1467,84 +1341,15 @@ export default function App() {
   const [tab, setTab]       = useState("overview");
   const [dark, setDark]     = useState(true);
   const [analyst, setAnalyst] = useState(false);
-
-  // ── Resizable panel state ──
-  // panelWidth is the committed width (used for layout, updated only on mouseup)
-  const [panelWidth, setPanelWidth] = useState(420);
-  const MIN_PANEL = 280;
-  const MAX_PANEL = 740;
-
-  // Refs for imperative drag (no per-pixel React re-renders)
-  const isDragging        = useRef(false);
-  const dragStartX        = useRef(0);
-  const dragStartWidth    = useRef(0);
-  const panelRef          = useRef(null);
-  const mainRef           = useRef(null);
-  const resizerRef        = useRef(null);
-  const overlayRef        = useRef(null);
-
-  const onResizerMouseDown = (e) => {
-    e.preventDefault();
-    isDragging.current     = true;
-    dragStartX.current     = e.clientX;
-    dragStartWidth.current = panelWidth;
-
-    // Show overlay to block chart mouse events and prevent selection
-    if (overlayRef.current) overlayRef.current.style.display = "block";
-    document.body.style.cursor    = "col-resize";
-    document.body.style.userSelect = "none";
-  };
-
-  useEffect(() => {
-    const onMouseMove = (e) => {
-      if (!isDragging.current) return;
-      const delta = dragStartX.current - e.clientX; // drag left = wider panel
-      const newW  = Math.min(MAX_PANEL, Math.max(MIN_PANEL, dragStartWidth.current + delta));
-
-      // Directly mutate DOM — zero React overhead during drag
-      if (panelRef.current)  panelRef.current.style.width    = `${newW}px`;
-      if (panelRef.current)  panelRef.current.style.minWidth = `${newW}px`;
-      if (resizerRef.current) resizerRef.current.dataset.active = "true";
-    };
-
-    const onMouseUp = (e) => {
-      if (!isDragging.current) return;
-      isDragging.current = false;
-
-      // Commit final width to React state (triggers one re-render)
-      const delta = dragStartX.current - e.clientX;
-      const newW  = Math.min(MAX_PANEL, Math.max(MIN_PANEL, dragStartWidth.current + delta));
-      setPanelWidth(newW);
-
-      // Restore
-      if (overlayRef.current) overlayRef.current.style.display = "none";
-      if (resizerRef.current) delete resizerRef.current.dataset.active;
-      document.body.style.cursor     = "";
-      document.body.style.userSelect = "";
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup",   onMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup",   onMouseUp);
-    };
-  }, [panelWidth]);
-
   const theme = dark ? DARK_THEME : LIGHT_THEME;
 
   const renderTab = () => {
-    if (tab==="overview")       return <Overview/>;
-    if (tab==="donors")         return <DonorIntel/>;
-    if (tab==="policy")         return <PolicyIntel/>;
-    if (tab==="donorweb")       return <DonorWeb/>;
-    if (tab==="spending")       return <SpendingAudit/>;
-    if (tab==="corporate")      return <Corporate/>;
-    if (tab==="stockact")       return <StockActMonitor theme={theme}/>;
-    if (tab==="darkmoney")      return <DarkMoneyTracker theme={theme}/>;
-    if (tab==="accountability") return <AccountabilityIndex theme={theme}/>;
-    if (tab==="companyprofile") return <CompanyProfile theme={theme}/>;
-    if (tab==="settings")       return <Settings theme={theme}/>;
+    if (tab==="overview")  return <Overview/>;
+    if (tab==="donors")    return <DonorIntel/>;
+    if (tab==="policy")    return <PolicyIntel/>;
+    if (tab==="donorweb")  return <DonorWeb/>;
+    if (tab==="spending")  return <SpendingAudit/>;
+    if (tab==="corporate") return <Corporate/>;
   };
 
   return (
@@ -1560,13 +1365,12 @@ export default function App() {
           input,textarea{color-scheme:${dark?"dark":"light"}}
           @keyframes dot{from{opacity:.2;transform:scale(.7)}to{opacity:1;transform:scale(1.3)}}
           @keyframes pulse{from{opacity:.5;box-shadow:0 0 4px #00FF88}to{opacity:1;box-shadow:0 0 10px #00FF88}}
-          [data-active="true"]{background:${ORANGE} !important;box-shadow:0 0 12px ${ORANGE}55 !important;}
         `}</style>
 
         {/* ── MASTHEAD ─────────────────────────────────────────── */}
         <div style={{ background:ORANGE, height:52, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 32px", flexShrink:0 }}>
           <div style={{ fontFamily:SF, fontSize:24, color:WHITE, fontWeight:700, letterSpacing:1.5 }}>
-            THE UN<span style={{ opacity:0.7 }}>•</span>REDACTED MONITOR
+            UN<span style={{ opacity:0.7 }}>*</span>REDACTED
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:20 }}>
             <div style={{ display:"flex", alignItems:"center", gap:7 }}>
@@ -1597,11 +1401,7 @@ export default function App() {
                 padding:"12px 16px",
                 fontFamily:MF, fontSize:10.5, letterSpacing:0.5,
                 whiteSpace:"nowrap", transition:"color .14s, border-color .14s",
-                display:"flex", alignItems:"center", gap:5,
-              }}>
-                {tb.label}
-                {tb.phase===3 && <span style={{ background:"#E6394622", border:"1px solid #E6394644", color:"#E63946", fontSize:7, padding:"1px 4px", borderRadius:2, fontWeight:700, letterSpacing:0.5 }}>P3</span>}
-              </button>
+              }}>{tb.label}</button>
             );
           })}
 
@@ -1638,24 +1438,6 @@ export default function App() {
               <span style={{ fontSize:12 }}>◈</span>
               ANALYST {analyst ? "▾" : "▸"}
             </button>
-
-            {/* SETTINGS BUTTON — far right */}
-            <div style={{ width:1, height:22, background:theme.border, flexShrink:0 }}/>
-            <button
-              onClick={() => setTab(t => t==="settings" ? "overview" : "settings")}
-              style={{
-                display:"flex", alignItems:"center", gap:6,
-                background:"transparent", border:"none",
-                borderBottom:`3px solid ${tab==="settings" ? ORANGE : "transparent"}`,
-                padding:"12px 10px",
-                fontFamily:MF, fontSize:10.5, letterSpacing:0.5,
-                color: tab==="settings" ? ORANGE : theme.mid,
-                transition:"color .14s, border-color .14s",
-                whiteSpace:"nowrap",
-              }}
-            >
-              ⚙ Settings
-            </button>
           </div>
         </div>
 
@@ -1663,23 +1445,11 @@ export default function App() {
         <div style={{ display:"flex", flex:1, overflow:"hidden", minHeight:0 }}>
 
           {/* Main content — shrinks when panel open */}
-          <div ref={mainRef} style={{
+          <div style={{
             flex:1, overflowY:"auto",
+            transition:"all .3s cubic-bezier(.4,0,.2,1)",
             minWidth:0,
-            position:"relative",
-            // Only animate width on open/close, not during drag
-            transition: analyst ? "none" : "all .3s cubic-bezier(.4,0,.2,1)",
           }}>
-            {/* Drag overlay — shown during resize to block chart mouse events */}
-            <div
-              ref={overlayRef}
-              style={{
-                display:"none",
-                position:"absolute", inset:0,
-                zIndex:9999,
-                cursor:"col-resize",
-              }}
-            />
             <div style={{ maxWidth: analyst ? "none" : 1200, margin:"0 auto", padding:"28px 28px 52px" }} key={tab}>
               {renderTab()}
               <div style={{ marginTop:32, borderTop:`1px solid ${theme.border}`, paddingTop:14, display:"flex", justifyContent:"space-between" }}>
@@ -1689,55 +1459,15 @@ export default function App() {
             </div>
           </div>
 
-          {/* ── Resizer handle — only visible when analyst panel is open */}
-          {analyst && (
-            <div
-              ref={resizerRef}
-              onMouseDown={onResizerMouseDown}
-              style={{
-                width:5,
-                flexShrink:0,
-                background:theme.border,
-                cursor:"col-resize",
-                position:"relative",
-                transition:"background .15s",
-                zIndex:10,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = ORANGE; }}
-              onMouseLeave={e => { if (!isDragging.current) e.currentTarget.style.background = theme.border; }}
-            >
-              {/* Centre grip dots */}
-              <div style={{
-                position:"absolute",
-                top:"50%", left:"50%",
-                transform:"translate(-50%,-50%)",
-                display:"flex", flexDirection:"column", gap:4,
-                pointerEvents:"none",
-              }}>
-                {[0,1,2,3,4].map(i => (
-                  <div key={i} style={{
-                    width:3, height:3, borderRadius:"50%",
-                    background: ORANGE,
-                    opacity:0.55,
-                  }}/>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Analyst panel — slides in from right */}
-          <div
-            ref={panelRef}
-            style={{
-              width:    analyst ? `${panelWidth}px` : "0px",
-              minWidth: analyst ? `${panelWidth}px` : "0px",
-              overflow:"hidden",
-              // Only animate on open/close, skip during drag
-              transition: analyst ? "none" : "all .3s cubic-bezier(.4,0,.2,1)",
-              flexShrink:0,
-              display:"flex", flexDirection:"column",
-            }}
-          >
+          <div style={{
+            width: analyst ? "420px" : "0px",
+            minWidth: analyst ? "420px" : "0px",
+            overflow:"hidden",
+            transition:"all .3s cubic-bezier(.4,0,.2,1)",
+            flexShrink:0,
+            display:"flex", flexDirection:"column",
+          }}>
             {analyst && (
               <AnalystPanel onClose={() => setAnalyst(false)} dark={dark}/>
             )}

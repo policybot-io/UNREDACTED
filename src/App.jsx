@@ -1469,60 +1469,51 @@ export default function App() {
   const [analyst, setAnalyst] = useState(false);
 
   // ── Resizable panel state ──
-  // panelWidth is the committed width (used for layout, updated only on mouseup)
   const [panelWidth, setPanelWidth] = useState(420);
   const MIN_PANEL = 280;
   const MAX_PANEL = 740;
 
-  // Refs for imperative drag (no per-pixel React re-renders)
-  const isDragging        = useRef(false);
-  const dragStartX        = useRef(0);
-  const dragStartWidth    = useRef(0);
-  const panelRef          = useRef(null);
-  const mainRef           = useRef(null);
-  const resizerRef        = useRef(null);
-  const overlayRef        = useRef(null);
+  // Refs for imperative drag — zero React re-renders per pixel
+  const isDragging     = useRef(false);
+  const dragStartX     = useRef(0);
+  const dragStartWidth = useRef(0);
+  const panelRef       = useRef(null);
+  const mainRef        = useRef(null);
+  const resizerRef     = useRef(null);
+  const overlayRef     = useRef(null);
 
   const onResizerMouseDown = (e) => {
     e.preventDefault();
     isDragging.current     = true;
     dragStartX.current     = e.clientX;
     dragStartWidth.current = panelWidth;
-
-    // Show overlay to block chart mouse events and prevent selection
+    // Show overlay to absorb chart mouse events while dragging
     if (overlayRef.current) overlayRef.current.style.display = "block";
-    document.body.style.cursor    = "col-resize";
+    document.body.style.cursor     = "col-resize";
     document.body.style.userSelect = "none";
   };
 
   useEffect(() => {
     const onMouseMove = (e) => {
       if (!isDragging.current) return;
-      const delta = dragStartX.current - e.clientX; // drag left = wider panel
+      const delta = dragStartX.current - e.clientX; // drag left → widen panel
       const newW  = Math.min(MAX_PANEL, Math.max(MIN_PANEL, dragStartWidth.current + delta));
-
-      // Directly mutate DOM — zero React overhead during drag
-      if (panelRef.current)  panelRef.current.style.width    = `${newW}px`;
-      if (panelRef.current)  panelRef.current.style.minWidth = `${newW}px`;
+      // Direct DOM mutation — skips React reconciliation entirely during drag
+      if (panelRef.current)  { panelRef.current.style.width = `${newW}px`; panelRef.current.style.minWidth = `${newW}px`; }
       if (resizerRef.current) resizerRef.current.dataset.active = "true";
     };
-
     const onMouseUp = (e) => {
       if (!isDragging.current) return;
       isDragging.current = false;
-
-      // Commit final width to React state (triggers one re-render)
       const delta = dragStartX.current - e.clientX;
       const newW  = Math.min(MAX_PANEL, Math.max(MIN_PANEL, dragStartWidth.current + delta));
+      // Single React state commit on release
       setPanelWidth(newW);
-
-      // Restore
       if (overlayRef.current) overlayRef.current.style.display = "none";
       if (resizerRef.current) delete resizerRef.current.dataset.active;
       document.body.style.cursor     = "";
       document.body.style.userSelect = "";
     };
-
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup",   onMouseUp);
     return () => {
@@ -1560,7 +1551,7 @@ export default function App() {
           input,textarea{color-scheme:${dark?"dark":"light"}}
           @keyframes dot{from{opacity:.2;transform:scale(.7)}to{opacity:1;transform:scale(1.3)}}
           @keyframes pulse{from{opacity:.5;box-shadow:0 0 4px #00FF88}to{opacity:1;box-shadow:0 0 10px #00FF88}}
-          [data-active="true"]{background:${ORANGE} !important;box-shadow:0 0 12px ${ORANGE}55 !important;}
+          [data-active="true"]{background:${ORANGE} !important;box-shadow:0 0 14px ${ORANGE}66 !important;}
         `}</style>
 
         {/* ── MASTHEAD ─────────────────────────────────────────── */}
@@ -1662,15 +1653,14 @@ export default function App() {
         {/* ── SPLIT BODY ───────────────────────────────────────── */}
         <div style={{ display:"flex", flex:1, overflow:"hidden", minHeight:0 }}>
 
-          {/* Main content — shrinks when panel open */}
+          {/* Main content */}
           <div ref={mainRef} style={{
             flex:1, overflowY:"auto",
             minWidth:0,
             position:"relative",
-            // Only animate width on open/close, not during drag
-            transition: analyst ? "none" : "all .3s cubic-bezier(.4,0,.2,1)",
+            transition:"none",   // no transition during drag; open/close handled by panel width
           }}>
-            {/* Drag overlay — shown during resize to block chart mouse events */}
+            {/* Transparent overlay absorbs chart events while dragging */}
             <div
               ref={overlayRef}
               style={{
@@ -1689,24 +1679,24 @@ export default function App() {
             </div>
           </div>
 
-          {/* ── Resizer handle — only visible when analyst panel is open */}
+          {/* ── Drag handle — only rendered when analyst panel is open ── */}
           {analyst && (
             <div
               ref={resizerRef}
               onMouseDown={onResizerMouseDown}
+              onMouseEnter={e => { e.currentTarget.style.background = ORANGE; }}
+              onMouseLeave={e => { if (!isDragging.current) e.currentTarget.style.background = theme.border; }}
               style={{
-                width:5,
+                width:6,
                 flexShrink:0,
                 background:theme.border,
                 cursor:"col-resize",
                 position:"relative",
-                transition:"background .15s",
                 zIndex:10,
+                transition:"background .15s",
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = ORANGE; }}
-              onMouseLeave={e => { if (!isDragging.current) e.currentTarget.style.background = theme.border; }}
             >
-              {/* Centre grip dots */}
+              {/* Grip dots centred on the handle */}
               <div style={{
                 position:"absolute",
                 top:"50%", left:"50%",
@@ -1717,8 +1707,7 @@ export default function App() {
                 {[0,1,2,3,4].map(i => (
                   <div key={i} style={{
                     width:3, height:3, borderRadius:"50%",
-                    background: ORANGE,
-                    opacity:0.55,
+                    background:ORANGE, opacity:0.6,
                   }}/>
                 ))}
               </div>
@@ -1732,8 +1721,7 @@ export default function App() {
               width:    analyst ? `${panelWidth}px` : "0px",
               minWidth: analyst ? `${panelWidth}px` : "0px",
               overflow:"hidden",
-              // Only animate on open/close, skip during drag
-              transition: analyst ? "none" : "all .3s cubic-bezier(.4,0,.2,1)",
+              transition: analyst ? "none" : "width .3s cubic-bezier(.4,0,.2,1), min-width .3s cubic-bezier(.4,0,.2,1)",
               flexShrink:0,
               display:"flex", flexDirection:"column",
             }}

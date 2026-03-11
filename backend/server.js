@@ -70,4 +70,4 @@ app.use((err, req, res, next) => {
 })
 
 const PORT = process.env.PORT || 3001
-app.listen(PORT, () => console.log(`R•CEIPTS backend running on :${PORT}`))
+app.listen(PORT, () => console.log(`UNREDACTED MONITOR backend running on :${PORT}`))

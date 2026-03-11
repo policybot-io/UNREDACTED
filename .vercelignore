@@ -1,0 +1,28 @@
+# Python ETL pipeline — not deployed to Vercel
+etl/
+agents/
+
+# Docker/local infra config
+docker-compose.yml
+
+# Old split-repo directories (superseded by monorepo)
+backend/
+frontend/
+
+# Local dev files
+.env
+*.local
+
+# Test artifacts
+test-results/
+coverage/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Documentation
+docs/
