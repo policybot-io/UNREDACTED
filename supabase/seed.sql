@@ -1,0 +1,6 @@
+-- ============================================================================
+-- UNREDACTED — Seed Data
+-- Corruption scores are computed on-demand from real data sources (FEC API,
+-- Senate eFiling, House Clerk, USASpending, Neo4j graph).
+-- No hardcoded scores are seeded — the platform shows only real computed data.
+-- ============================================================================

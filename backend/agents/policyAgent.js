@@ -1,7 +1,10 @@
 import { searchRules } from '../services/federalRegister.js'
 
 export async function runPolicyAgent({ keywords, entities, policyTask }) {
-  const keyword = (keywords?.length ? keywords.join(' ') : null) || entities?.[0] || ''
+  // Use at most the first 2 keywords to avoid over-constraining the FR full-text search
+  const keyword = keywords?.length
+    ? keywords.slice(0, 2).join(' ')
+    : (entities?.[0] || '')
   try {
     const rules = await searchRules({ keyword, limit: 8 })
     return rules.map(r => ({

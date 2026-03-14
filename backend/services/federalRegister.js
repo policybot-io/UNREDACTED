@@ -16,10 +16,10 @@ function buildFRUrl(path, queryParams, fields) {
   return url.toString()
 }
 
-// Get date from 12 months ago in ISO format
+// Get date from 2 years ago — ensures Jan 2025 EOs/rules are included
 function getOneYearAgo() {
   const date = new Date()
-  date.setFullYear(date.getFullYear() - 1)
+  date.setFullYear(date.getFullYear() - 2)
   return date.toISOString().split('T')[0]
 }
 

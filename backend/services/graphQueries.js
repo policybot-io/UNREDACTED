@@ -1,15 +1,15 @@
-"""Neo4j graph query service for corruption pattern detection."""
+/** Neo4j graph query service for corruption pattern detection. */
 import neo4j from 'neo4j-driver'
-
-const NEO4J_URI = process.env.NEO4J_URI || 'bolt://localhost:7687'
-const NEO4J_USER = process.env.NEO4J_USER || 'neo4j'
-const NEO4J_PASSWORD = process.env.NEO4J_PASSWORD || 'password'
 
 let driver
 
 function getDriver() {
   if (!driver) {
-    driver = neo4j.driver(NEO4J_URI, neo4j.auth.basic(NEO4J_USER, NEO4J_PASSWORD))
+    // Read lazily so dotenv.config() has already run by this point
+    const uri      = process.env.NEO4J_URI      || 'bolt://localhost:7687'
+    const user     = process.env.NEO4J_USERNAME  || process.env.NEO4J_USER || 'neo4j'
+    const password = process.env.NEO4J_PASSWORD  || 'password'
+    driver = neo4j.driver(uri, neo4j.auth.basic(user, password))
   }
   return driver
 }
@@ -26,18 +26,17 @@ export async function closeDriver() {
  * The core "quid pro quo" pattern
  */
 export async function findQuidProQuoPaths({ agencyName, minAmount = 100000, lookbackMonths = 12 }) {
-  const session = getDriver().session()
+  let session
   try {
+    session = getDriver().session()
     const result = await session.run(`
       MATCH path = (c:Company)-[:RECEIVED]->(contract:Contract)<-[:AWARDED]-(a:Agency)<-[:OVERSEES]-(comm:Committee)<-[:SITS_ON]-(p:Politician)
-      WHERE a.name CONTAINS $agencyName OR $agencyName = ''
+      WHERE (a.name CONTAINS $agencyName OR $agencyName = '')
         AND contract.award_date >= date() - duration({months: $lookbackMonths})
-        AND contract.amount >= $minAmount
-      WITH c, p, a, comm, contract,
+        AND coalesce(contract.award_amount, 0) >= $minAmount
+      WITH c, p, a, comm,
            count(contract) as contractCount,
-           sum(contract.amount) as totalAmount
-      OPTIONAL MATCH (c)-[:PAC_DONATED]->(p)
-      WHERE datetime() - duration({months: $lookbackMonths}) < c.createdAt < datetime()
+           sum(coalesce(contract.award_amount, 0)) as totalAmount
       RETURN {
         company: c.name,
         politician: p.name,
@@ -49,11 +48,14 @@ export async function findQuidProQuoPaths({ agencyName, minAmount = 100000, look
       } as pattern
       ORDER BY totalAmount DESC
       LIMIT 20
-    `, { agencyName, minAmount, lookbackMonths })
+    `, { agencyName, minAmount: neo4j.int(minAmount), lookbackMonths: neo4j.int(lookbackMonths) })
 
     return result.records.map(r => r.get('pattern'))
+  } catch (e) {
+    console.warn('[graphQueries] findQuidProQuoPaths unavailable:', e.message.slice(0, 100))
+    return []
   } finally {
-    await session.close()
+    if (session) await session.close()
   }
 }
 
@@ -61,8 +63,9 @@ export async function findQuidProQuoPaths({ agencyName, minAmount = 100000, look
  * Get spending network for a company
  */
 export async function getCompanyNetwork(normalizedName, depth = 2) {
-  const session = getDriver().session()
+  let session
   try {
+    session = getDriver().session()
     const result = await session.run(`
       MATCH path = (c:Company {normalized_name: $normalizedName})-[:RECEIVED|SIMILAR_TO*1..$depth]-(related)
       WITH c, related, relationships(path) as rels
@@ -75,11 +78,14 @@ export async function getCompanyNetwork(normalizedName, depth = 2) {
       } as connection
       ORDER BY pathLength
       LIMIT 50
-    `, { normalizedName, depth })
+    `, { normalizedName, depth: neo4j.int(depth) })
 
     return result.records.map(r => r.get('connection'))
+  } catch (e) {
+    console.warn('[graphQueries] getCompanyNetwork unavailable:', e.message.slice(0, 100))
+    return []
   } finally {
-    await session.close()
+    if (session) await session.close()
   }
 }
 
@@ -87,24 +93,28 @@ export async function getCompanyNetwork(normalizedName, depth = 2) {
  * Get top contractors by agency
  */
 export async function getTopContractorsByAgency(agencyName, limit = 20) {
-  const session = getDriver().session()
+  let session
   try {
+    session = getDriver().session()
     const result = await session.run(`
       MATCH (c:Company)-[:RECEIVED]->(contract:Contract)<-[:AWARDED]-(a:Agency {name: $agencyName})
-      WITH c, sum(contract.amount) as totalAmount, count(contract) as contractCount
+      WITH c, sum(coalesce(contract.award_amount, 0)) as totalAmount, count(contract) as contractCount
       RETURN {
         company: c.name,
         totalAmount: totalAmount,
         contractCount: contractCount,
-        avgContractAmount: totalAmount / contractCount
+        avgContractAmount: CASE WHEN contractCount > 0 THEN totalAmount / contractCount ELSE 0 END
       } as contractor
       ORDER BY totalAmount DESC
       LIMIT $limit
-    `, { agencyName, limit })
+    `, { agencyName, limit: neo4j.int(limit) })
 
     return result.records.map(r => r.get('contractor'))
+  } catch (e) {
+    console.warn('[graphQueries] getTopContractorsByAgency unavailable:', e.message.slice(0, 100))
+    return []
   } finally {
-    await session.close()
+    if (session) await session.close()
   }
 }
 
@@ -112,8 +122,9 @@ export async function getTopContractorsByAgency(agencyName, limit = 20) {
  * Find regulatory patterns (agency rules related to companies)
  */
 export async function findRegulatoryPatterns({ companyName, lookbackMonths = 12 }) {
-  const session = getDriver().session()
+  let session
   try {
+    session = getDriver().session()
     const result = await session.run(`
       MATCH (c:Company {normalized_name: $companyName})
       MATCH (c)-[:RECEIVED]->(contract:Contract)<-[:AWARDED]-(a:Agency)
@@ -127,14 +138,17 @@ export async function findRegulatoryPatterns({ companyName, lookbackMonths = 12 
         publicationDate: r.publication_date,
         significant: r.significant,
         totalContracts: count(contract),
-        totalAmount: sum(contract.amount)
+        totalAmount: sum(coalesce(contract.award_amount, 0))
       } as pattern
       ORDER BY r.publication_date DESC
-    `, { companyName, lookbackMonths })
+    `, { companyName, lookbackMonths: neo4j.int(lookbackMonths) })
 
     return result.records.map(r => r.get('pattern'))
+  } catch (e) {
+    console.warn('[graphQueries] findRegulatoryPatterns unavailable:', e.message.slice(0, 100))
+    return []
   } finally {
-    await session.close()
+    if (session) await session.close()
   }
 }
 
@@ -142,8 +156,9 @@ export async function findRegulatoryPatterns({ companyName, lookbackMonths = 12 
  * Get corruption risk score for a company
  */
 export async function getCompanyRiskScore(normalizedName) {
-  const session = getDriver().session()
+  let session
   try {
+    session = getDriver().session()
     // Calculate risk based on multiple factors
     const result = await session.run(`
       MATCH (c:Company {normalized_name: $normalizedName})
@@ -171,7 +186,6 @@ export async function getCompanyRiskScore(normalizedName) {
         contractCount: contractCount,
         significantRules: significantRules,
         politicianConnections: politicianConnections,
-        // Risk score: higher spending + significant rules + donor connections = higher risk
         riskScore: CASE
           WHEN totalSpending > 100000000 AND significantRules > 0 AND politicianConnections > 0 THEN 85
           WHEN totalSpending > 50000000 AND (significantRules > 0 OR politicianConnections > 0) THEN 70
@@ -189,8 +203,11 @@ export async function getCompanyRiskScore(normalizedName) {
       politicianConnections: 0,
       riskScore: 0
     }
+  } catch (e) {
+    console.warn('[graphQueries] getCompanyRiskScore unavailable:', e.message.slice(0, 100))
+    return { company: normalizedName, totalSpending: 0, contractCount: 0, significantRules: 0, politicianConnections: 0, riskScore: 0 }
   } finally {
-    await session.close()
+    if (session) await session.close()
   }
 }
 

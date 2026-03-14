@@ -44,6 +44,8 @@ export async function getCandidateRaisedTotals(candidateId, electionYear) {
 // ========== PHASE 2: DONOR INTELLIGENCE FUNCTIONS ==========
 
 export async function getCandidateContributions(candidateId, limit = 50, minAmount = 1000) {
+  // FEC schedule_a requires two_year_transaction_period or another filter alongside candidate_id
+  const cycle = getCurrentElectionYear()
   const res = await axios.get(`${BASE}/schedules/schedule_a/`, {
     params: {
       candidate_id: candidateId,
@@ -52,7 +54,9 @@ export async function getCandidateContributions(candidateId, limit = 50, minAmou
       sort: '-contribution_receipt_amount',
       min_amount: minAmount,
       is_individual: true,
+      two_year_transaction_period: cycle,
     },
+    timeout: 10000,
   })
   return res.data.results || []
 }

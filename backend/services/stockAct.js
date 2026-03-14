@@ -8,9 +8,9 @@ import axios from 'axios'
 const FEC_BASE = 'https://api.open.fec.gov/v1'
 const KEY = process.env.FEC_API_KEY || 'DEMO_KEY'
 
-// Senate eFiling search endpoint
+// Senate eFiling — EFTS search endpoint (may vary by deployment)
 const SENATE_EFTS = 'https://efts.senate.gov/PROD/s_search.json'
-// House disclosures API
+// House disclosures — clerk's financial PDF listing
 const HOUSE_DISCLOSURES = 'https://disclosures-clerk.house.gov/api/v1/financial-pdfs'
 
 /**
@@ -165,11 +165,25 @@ async function getCommitteeActivityForCompany(ticker, tradeDate) {
 
 /**
  * Get all stock trades for a specific politician.
+ * Returns PTR filing metadata filtered by politician name.
+ * (Individual transaction details require PDF parsing ETL pipeline)
  */
 export async function getStockTradesByPolitician(name, chamber = null) {
-  // Individual trade details require PDF parsing ETL pipeline (not yet complete)
-  // PTR filing metadata does not include parsed individual transactions
-  return []
+  try {
+    const nameLower = name.toLowerCase().trim()
+    const allTrades = await getRecentStockTrades(chamber, 200)
+
+    return allTrades.filter(t => {
+      const politicianName = (t.senator || t.representative || '').toLowerCase().trim()
+      if (!politicianName) return false
+      // Handle "Last, First" and "First Last" formats
+      const lastName = politicianName.split(',')[0].trim()
+      return politicianName.includes(nameLower) || nameLower.includes(lastName)
+    })
+  } catch (e) {
+    console.error('getStockTradesByPolitician error:', e.message)
+    return []
+  }
 }
 
 /**
@@ -189,9 +203,63 @@ export async function getMarketOutperformance(politicianName) {
 
 /**
  * Get politicians with highest STOCK Act violation risk scores.
+ * Risk is proxied by PTR filing frequency — high-frequency traders
+ * have more exposure to insider trading allegations.
+ * (Exact violations require PDF parsing of individual trade records)
  */
 export async function getViolationWatchlist() {
-  // Requires parsed trade data from PDF ETL pipeline to detect violations
-  return []
+  try {
+    const [senateRes, houseRes] = await Promise.allSettled([
+      getSenateRecentTrades(200),
+      getHouseRecentTrades(200),
+    ])
+
+    const allFilings = [
+      ...(senateRes.status === 'fulfilled' ? senateRes.value : []),
+      ...(houseRes.status === 'fulfilled' ? houseRes.value : []),
+    ]
+
+    if (allFilings.length === 0) return []
+
+    // Aggregate filings by politician
+    const byPolitician = {}
+    for (const filing of allFilings) {
+      const name = (filing.senator || filing.representative || '').trim()
+      if (!name || name === 'Unknown') continue
+      if (!byPolitician[name]) {
+        byPolitician[name] = {
+          politician: name,
+          chamber: filing.chamber,
+          filingCount: 0,
+          latestFiling: null,
+        }
+      }
+      byPolitician[name].filingCount++
+      const d = filing.filingDate
+      if (d && (!byPolitician[name].latestFiling || d > byPolitician[name].latestFiling)) {
+        byPolitician[name].latestFiling = d
+      }
+    }
+
+    // Build watchlist: politicians with 2+ PTR filings have elevated risk
+    return Object.values(byPolitician)
+      .filter(p => p.filingCount >= 2)
+      .map(p => ({
+        politician: p.politician,
+        chamber: p.chamber,
+        state: '—',
+        filingCount: p.filingCount,
+        latestFiling: p.latestFiling,
+        // Risk score: frequency-based proxy (40 base + 5 per filing, capped at 95)
+        riskScore: Math.min(95, 40 + Math.round(p.filingCount * 5)),
+        violationCount: 0,
+        note: 'Risk score based on PTR filing frequency — individual trades require PDF parsing',
+      }))
+      .sort((a, b) => b.riskScore - a.riskScore)
+      .slice(0, 30)
+  } catch (e) {
+    console.error('getViolationWatchlist error:', e.message)
+    return []
+  }
 }
 

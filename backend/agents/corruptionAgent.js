@@ -9,9 +9,8 @@ export async function runCorruptionAgent({ plan, policyResults, spendingResults,
   const context = `POLICY DATA (Federal Register):\n${policyCtx}\n\nSPENDING DATA (USASpending.gov):\n${spendingCtx}\n\nCAMPAIGN FINANCE DATA (FEC):\n${donorCtx}`
 
   const response = await createChatCompletion({
-    model: process.env.AI_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'deepseek-chat',
     response_format: { type: 'json_object' },
-    max_tokens: 1500,
+    max_tokens: 3000,
     messages: [
       {
         role: 'system',

@@ -13,41 +13,56 @@ const KEY = process.env.FEC_API_KEY || 'DEMO_KEY'
  */
 export async function getDarkMoneyOrgs(limit = 20) {
   try {
-    // Fetch Super PACs (V = Super PAC, O = Super PAC (Non-Contribution))
+    // Fetch Super PACs (V) and 501c4-equivalent hybrids (W) from FEC
     const [superPacs, nonprofits] = await Promise.allSettled([
       axios.get(`${FEC_BASE}/committees/`, {
-        params: { committee_type: 'V', api_key: KEY, per_page: Math.ceil(limit / 2), sort: '-total_disbursements' },
+        params: { committee_type: 'V', api_key: KEY, per_page: Math.ceil(limit / 2) },
         timeout: 10000,
       }),
       axios.get(`${FEC_BASE}/committees/`, {
-        params: { committee_type: 'W', api_key: KEY, per_page: Math.floor(limit / 2), sort: '-total_disbursements' },
+        params: { committee_type: 'W', api_key: KEY, per_page: Math.floor(limit / 2) },
         timeout: 10000,
       }),
     ])
 
-    const results = []
-
+    const raw = []
     if (superPacs.status === 'fulfilled') {
-      for (const c of superPacs.value.data?.results || []) {
-        results.push(normalizeCommittee(c, 'super_pac'))
-      }
+      for (const c of superPacs.value.data?.results || []) raw.push({ c, type: 'super_pac' })
     }
-
     if (nonprofits.status === 'fulfilled') {
-      for (const c of nonprofits.value.data?.results || []) {
-        results.push(normalizeCommittee(c, '501c4'))
-      }
+      for (const c of nonprofits.value.data?.results || []) raw.push({ c, type: '501c4' })
     }
 
-    return results.slice(0, limit)
+    if (raw.length === 0) {
+      console.warn('FEC returned no committee results')
+      return []
+    }
+
+    // Fetch per-committee financial totals in parallel (FEC list endpoint omits these)
+    const withTotals = await Promise.allSettled(
+      raw.slice(0, limit).map(({ c, type }) =>
+        axios.get(`${FEC_BASE}/committee/${c.committee_id}/totals/`, {
+          params: { api_key: KEY },
+          timeout: 8000,
+        }).then(res => {
+          const totals = res.data?.results?.[0] || {}
+          return normalizeCommittee(c, type, totals)
+        }).catch(() => normalizeCommittee(c, type, {}))
+      )
+    )
+
+    return withTotals
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value)
+      .sort((a, b) => b.totalSpend - a.totalSpend)
   } catch (e) {
     console.error('getDarkMoneyOrgs error:', e.message)
     return []
   }
 }
 
-function normalizeCommittee(c, type) {
-  const totalDisbursements = c.total_disbursements || 0
+function normalizeCommittee(c, type, totals = {}) {
+  const totalDisbursements = totals.disbursements || totals.total_disbursements || 0
 
   // Classify disclosure level based on connected org and filing completeness
   let disclosureLevel = 'dark'

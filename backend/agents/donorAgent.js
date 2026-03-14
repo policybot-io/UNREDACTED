@@ -21,31 +21,23 @@ export async function runDonorAgent({ keywords, entities, query }) {
     ])
 
     // Get additional data for the first candidate and committee if available
+    // Use try/catch on each to avoid 429 rate-limit cascades
     let candidateContributions = []
     let committeeContributions = []
     let donorNetwork = null
     let pacSpending = null
 
     if (candidates.length > 0) {
-      const topCandidate = candidates[0]
-      candidateContributions = await getCandidateContributions(topCandidate.candidate_id, 10, 1000)
+      try { candidateContributions = await getCandidateContributions(candidates[0].candidate_id, 10, 1000) } catch (e) {}
     }
 
     if (committees.length > 0) {
-      const topCommittee = committees[0]
-      committeeContributions = await getCommitteeContributions(topCommittee.committee_id, 10, 1000)
-
-      // Get PAC spending for the top committee
-      pacSpending = await getPACSpending(topCommittee.committee_id, 10)
+      try { committeeContributions = await getCommitteeContributions(committees[0].committee_id, 10, 1000) } catch (e) {}
+      try { pacSpending = await getPACSpending(committees[0].committee_id, 10) } catch (e) {}
     }
 
-    // Try to get donor network if keyword looks like a person name
     if (keyword.split(' ').length >= 2 && !keyword.includes('inc') && !keyword.includes('llc')) {
-      try {
-        donorNetwork = await getDonorNetwork(keyword, 15)
-      } catch (e) {
-        // Silently fail if donor network not found
-      }
+      try { donorNetwork = await getDonorNetwork(keyword, 15) } catch (e) {}
     }
 
     // Analyze relationships and patterns

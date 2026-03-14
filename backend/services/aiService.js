@@ -118,7 +118,7 @@ async function getAnthropicClient() {
 const DEFAULT_MODELS = {
   deepseek:  'deepseek-chat',
   openai:    'gpt-4o',
-  anthropic: 'claude-3-5-sonnet-20241022',
+  anthropic: 'claude-sonnet-4-6',
   groq:      'llama-3.3-70b-versatile',
   ollama:    'llama3.2',
   qwen:      'qwen-plus',
@@ -186,10 +186,16 @@ async function _anthropicCompletion(params, defaultModel) {
   const systemMsg = params.messages.find(m => m.role === 'system')
   const userMsgs  = params.messages.filter(m => m.role !== 'system')
 
+  // Anthropic doesn't support response_format — append JSON instruction to system prompt
+  let systemContent = systemMsg?.content || ''
+  if (params.response_format?.type === 'json_object') {
+    systemContent += '\n\nIMPORTANT: Respond ONLY with raw valid JSON. No markdown, no code blocks, no explanation — just the JSON object.'
+  }
+
   const res = await anthropic.messages.create({
     model:      params.model || defaultModel,
     max_tokens: params.max_tokens || 2000,
-    system:     systemMsg?.content || '',
+    system:     systemContent,
     messages:   userMsgs,
   })
 
@@ -238,7 +244,12 @@ export async function quickCompletion(systemPrompt, userPrompt, options = {}) {
 
 export function safeJsonParse(content) {
   try {
-    return JSON.parse(content)
+    // Strip markdown code fences that Claude sometimes wraps around JSON
+    const cleaned = (content || '')
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/, '')
+      .trim()
+    return JSON.parse(cleaned)
   } catch (e) {
     console.error('Failed to parse JSON:', e.message)
     console.error('Content:', content?.slice(0, 500))

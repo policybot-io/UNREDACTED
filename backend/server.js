@@ -1,8 +1,7 @@
+import 'dotenv/config'   // must be first — ESM hoisting means dotenv.config() called after would be too late
 import express from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import { rateLimit } from 'express-rate-limit'
-dotenv.config()
 
 import spendingRouter from './routes/spending.js'
 import policyRouter from './routes/policy.js'
@@ -16,12 +15,17 @@ import corruptionRouter from './routes/corruption.js'
 import companiesRouter from './routes/companies.js'
 import stockActRouter from './routes/stockact.js'
 import darkMoneyRouter from './routes/darkmoney.js'
+// Phase 4: Supabase-backed user features
+import watchlistRouter from './routes/watchlist.js'
+import alertsRouter from './routes/alerts.js'
+import flagsRouter from './routes/flags.js'
 
 const app = express()
 
 app.use(cors({
   origin: ['http://localhost:5173', 'http://localhost:5174'],
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'DELETE', 'PATCH', 'PUT'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Service-Token'],
 }))
 app.use(express.json({ limit: '10kb' }))
 
@@ -62,6 +66,10 @@ app.use('/api/corruption', generalLimiter, corruptionRouter)
 app.use('/api/companies', generalLimiter, companiesRouter)
 app.use('/api/stockact', generalLimiter, stockActRouter)
 app.use('/api/darkmoney', generalLimiter, darkMoneyRouter)
+// Phase 4: Supabase-backed user features
+app.use('/api/watchlist', generalLimiter, watchlistRouter)
+app.use('/api/alerts', generalLimiter, alertsRouter)
+app.use('/api/flags', generalLimiter, flagsRouter)
 
 // Global error handler
 app.use((err, req, res, next) => {

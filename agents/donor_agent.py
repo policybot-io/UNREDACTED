@@ -1,6 +1,6 @@
 """Donor Intelligence Agent using LangGraph."""
 from typing import Dict, Any, List, Optional
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
@@ -25,10 +25,10 @@ class DonorIntelligenceAgent:
 
     def __init__(self):
         # Initialize LLM
-        self.llm = ChatOpenAI(
-            model="gpt-4-turbo-preview",
+        self.llm = ChatAnthropic(
+            model="claude-sonnet-4-6",
             temperature=0.1,
-            api_key=os.getenv("OPENAI_API_KEY")
+            api_key=os.getenv("ANTHROPIC_API_KEY")
         )
 
         # Build the workflow graph
@@ -95,55 +95,114 @@ class DonorIntelligenceAgent:
         return {"context": {"entities": entities}}
 
     async def _query_database(self, state: AgentState) -> Dict[str, Any]:
-        """Query the database for relevant data."""
-        # In production, this would query PostgreSQL and Neo4j
-        # For now, return mock data
+        """Query FEC API for real candidate and donor data."""
+        import httpx
 
         entities = state.context.get("entities", {}) if state.context else {}
+        fec_key = os.getenv("FEC_API_KEY", "DEMO_KEY")
+        fec_base = "https://api.open.fec.gov/v1"
 
-        # Mock database queries based on entities
         donor_data = {}
         candidate_data = {}
+        sources = []
 
-        if entities.get("persons") or "senator" in state.query.lower():
-            # Mock candidate data
-            candidate_data = {
-                "candidates": [
-                    {
-                        "name": "John Smith",
-                        "party": "Democratic",
-                        "state": "CA",
-                        "total_raised": 1250000,
-                        "cash_on_hand": 350000,
-                        "top_donors": [
-                            {"name": "Tech Corp Inc", "amount": 50000},
-                            {"name": "Law Firm LLP", "amount": 35000},
-                            {"name": "Healthcare Assoc", "amount": 28000}
-                        ]
-                    }
-                ]
-            }
+        # Build search term from extracted entities or raw query
+        persons = entities.get("persons", [])
+        orgs = entities.get("organizations", [])
+        search_term = " ".join(persons) if persons else " ".join(orgs) if orgs else state.query[:60]
 
-        if entities.get("organizations") or "company" in state.query.lower():
-            # Mock donor data
-            donor_data = {
-                "donors": [
-                    {
-                        "name": "Tech Corp Inc",
-                        "total_contributions": 250000,
-                        "top_recipients": [
-                            {"name": "John Smith", "amount": 50000, "party": "Democratic"},
-                            {"name": "Jane Doe", "amount": 45000, "party": "Republican"}
-                        ],
-                        "industry": "Technology"
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            # Search FEC candidates
+            try:
+                resp = await client.get(
+                    f"{fec_base}/candidates/search/",
+                    params={"q": search_term, "api_key": fec_key, "per_page": 5, "sort": "-receipts"}
+                )
+                if resp.status_code == 200:
+                    candidates = resp.json().get("results", [])
+                    sources.append("FEC Candidates API")
+                    candidate_details = []
+
+                    for cand in candidates[:3]:
+                        cand_info = {
+                            "name": cand.get("name"),
+                            "party": cand.get("party_full"),
+                            "state": cand.get("state"),
+                            "office": cand.get("office_full"),
+                            "candidate_id": cand.get("candidate_id"),
+                            "total_raised": 0,
+                            "cash_on_hand": 0,
+                        }
+                        # Fetch financial totals for each candidate
+                        try:
+                            tot_resp = await client.get(
+                                f"{fec_base}/candidate/{cand['candidate_id']}/totals/",
+                                params={"api_key": fec_key}
+                            )
+                            if tot_resp.status_code == 200:
+                                totals = tot_resp.json().get("results", [{}])
+                                if totals:
+                                    cand_info["total_raised"] = totals[0].get("receipts", 0)
+                                    cand_info["cash_on_hand"] = totals[0].get("cash_on_hand", 0)
+                        except Exception:
+                            pass
+
+                        candidate_details.append(cand_info)
+
+                    if candidate_details:
+                        candidate_data = {"candidates": candidate_details}
+            except Exception as e:
+                pass  # FEC unavailable — return empty, not fake data
+
+            # Search FEC schedule_a for top donors by employer
+            try:
+                current_cycle = 2024 if 2026 % 2 == 0 else 2024  # current two-year period
+                resp = await client.get(
+                    f"{fec_base}/schedules/schedule_a/",
+                    params={
+                        "contributor_employer": search_term,
+                        "api_key": fec_key,
+                        "per_page": 20,
+                        "sort": "-contribution_receipt_amount",
+                        "two_year_transaction_period": current_cycle,
                     }
-                ]
-            }
+                )
+                if resp.status_code == 200:
+                    contributions = resp.json().get("results", [])
+                    sources.append("FEC Schedule A (Contributions)")
+
+                    # Aggregate by contributor
+                    by_contributor: Dict[str, Any] = {}
+                    for c in contributions:
+                        name = c.get("contributor_name", "Unknown")
+                        if not name or name == "Unknown":
+                            continue
+                        if name not in by_contributor:
+                            by_contributor[name] = {
+                                "name": name,
+                                "employer": c.get("contributor_employer"),
+                                "total_contributions": 0.0,
+                                "top_recipients": [],
+                            }
+                        amount = float(c.get("contribution_receipt_amount") or 0)
+                        by_contributor[name]["total_contributions"] += amount
+                        candidate_info = c.get("candidate") or {}
+                        if candidate_info.get("name"):
+                            by_contributor[name]["top_recipients"].append({
+                                "name": candidate_info.get("name"),
+                                "amount": amount,
+                                "party": candidate_info.get("party_full", "Unknown"),
+                            })
+
+                    if by_contributor:
+                        donor_data = {"donors": list(by_contributor.values())[:10]}
+            except Exception:
+                pass  # FEC unavailable — return empty, not fake data
 
         return {
             "donor_data": donor_data,
             "candidate_data": candidate_data,
-            "sources": ["FEC API", "OpenSecrets", "Internal Database"]
+            "sources": sources if sources else ["FEC API (no data returned for query)"],
         }
 
     async def _analyze_patterns(self, state: AgentState) -> Dict[str, Any]:

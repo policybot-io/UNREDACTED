@@ -8,7 +8,33 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-POSTGRES_URI = os.getenv("POSTGRES_URI", "postgresql://postgres:password@localhost:5432/unredacted")
+# Prefer DATABASE_URL (Supabase pooled connection via PgBouncer) over the legacy POSTGRES_URI.
+# When using Supabase, set DATABASE_URL to the "Transaction mode" pooled connection URL
+# (port 6543) from the Supabase dashboard → Project Settings → Database → Connection string.
+POSTGRES_URI = os.getenv(
+    "DATABASE_URL",   # Supabase pooled connection URL (preferred)
+    os.getenv("POSTGRES_URI", "postgresql://postgres:password@localhost:5432/unredacted")
+)
+
+# Optional: Supabase Python client for direct table access with RLS support.
+# Install with: pip install supabase
+# Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.
+try:
+    from supabase import create_client, Client as SupabaseClient
+
+    _supabase_url = os.getenv("SUPABASE_URL")
+    _supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+    supabase: Optional[SupabaseClient] = (
+        create_client(_supabase_url, _supabase_key)
+        if _supabase_url and _supabase_key
+        else None
+    )
+    if supabase:
+        logger.info("Supabase Python client initialized")
+except ImportError:
+    supabase = None
+    logger.debug("supabase Python package not installed — skipping Supabase client init")
 
 
 class PostgresConnection:
