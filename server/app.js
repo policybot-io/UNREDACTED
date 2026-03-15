@@ -22,13 +22,17 @@ const app = express()
 app.set('etag', false)
 
 // CORS — permissive for API (same-origin on Vercel, cross-origin in local dev)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  /\.vercel\.app$/,
+]
+if (process.env.ALLOWED_ORIGIN) {
+  allowedOrigins.push(process.env.ALLOWED_ORIGIN)
+}
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000',
-    /\.vercel\.app$/,
-  ],
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'OPTIONS'],
 }))
 
