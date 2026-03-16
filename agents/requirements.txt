@@ -7,7 +7,7 @@ uvicorn[standard]==0.34.0
 
 # LangChain + LangGraph AI stack
 langchain==0.3.14
-langchain-core==0.3.30
+langchain-core==1.2.11
 langgraph==0.2.62
 
 # Provider SDKs — install all so AI_PROVIDER can be switched via env var
