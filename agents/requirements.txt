@@ -25,4 +25,4 @@ httpx==0.28.1
 pydantic==2.10.6
 
 # Environment config
-python-dotenv==1.0.1
+python-dotenv==1.2.2
