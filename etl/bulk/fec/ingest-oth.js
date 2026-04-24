@@ -19,8 +19,8 @@ export async function ingestOth({ cycle, dryRun = false }) {
 
   try {
     const zipPath = await downloadZip(url)
-    const txtPath = extractZip(zipPath, innerName)
-    const checksum = fileChecksum(zipPath)
+    const txtPath = await extractZip(zipPath, innerName)
+    const checksum = await fileChecksum(zipPath)
 
     const view = await openFecView({ filePath: txtPath, ...OTH, viewName: 'oth_raw' })
     const [{ count }] = await view.run(`SELECT COUNT(*) AS count FROM oth_raw`)

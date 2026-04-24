@@ -76,6 +76,35 @@ export async function openFecView({ filePath, columns, types = {}, viewName = 'f
   }
 }
 
+/**
+ * Load a comma-delimited CSV file (with header row) into a DuckDB temp view.
+ * Used for FEC files that are published as comma-delimited CSVs rather than
+ * the classic pipe-delimited bulk format (IEs, electioneering, comm costs, bundles).
+ */
+export async function openCsvView({ filePath, viewName = 'csv_raw', delim = ',' }) {
+  const db = getDB()
+  const conn = db.connect()
+  await configureR2(conn)
+
+  await exec(conn, `
+    CREATE OR REPLACE VIEW ${viewName} AS
+    SELECT * FROM read_csv(
+      '${filePath.replace(/'/g, "''")}',
+      delim = '${delim}',
+      header = true,
+      ignore_errors = true,
+      nullstr = ''
+    );
+  `)
+
+  return {
+    conn,
+    run: (q, p) => run(conn, q, p),
+    exec: q => exec(conn, q),
+    close: () => conn.close(),
+  }
+}
+
 export function parquetS3Path(key) {
   return `s3://${env.r2.bucket}/${key}`
 }

@@ -142,11 +142,14 @@ const CampaignWatch = () => {
       .catch(() => {});
   }, []);
 
+  const contractsArr = Array.isArray(liveContracts?.data)
+    ? liveContracts.data
+    : (liveContracts?.data?.results || []);
   const totalSpend = liveContracts
-    ? liveContracts.data.reduce((s, c) => s + parseFloat(c['Award Amount'] || 0), 0)
+    ? contractsArr.reduce((s, c) => s + parseFloat(c['Award Amount'] || 0), 0)
     : null;
   const flaggedCount = liveContracts
-    ? liveContracts.data.filter(c => parseFloat(c['Award Amount'] || 0) >= 5e8).length
+    ? contractsArr.filter(c => parseFloat(c['Award Amount'] || 0) >= 5e8).length
     : null;
 
   const [selectedState,   setSelectedState]   = useState(null);

@@ -6,13 +6,24 @@ import {
   inferFundingSource,
   getDarkMoneyFlowData,
 } from '../services/darkMoney.js'
+import * as sbDarkMoney from '../services/supabaseDarkMoney.js'
 
 const router = Router()
+
+const DEFAULT_SOURCE = (process.env.DONOR_SOURCE || 'fec').toLowerCase()
+function useSupabase(req) {
+  const s = (req.query.source || DEFAULT_SOURCE).toString().toLowerCase()
+  return s === 'supabase'
+}
 
 // GET /api/darkmoney/orgs
 router.get('/orgs', async (req, res) => {
   try {
-    const { limit } = req.query
+    const { limit, cycle } = req.query
+    if (useSupabase(req)) {
+      const data = await sbDarkMoney.getDarkMoneyOrgs(parseInt(limit) || 20, cycle ? parseInt(cycle) : undefined)
+      return res.json({ success: true, source: 'supabase', data })
+    }
     const data = await getDarkMoneyOrgs(parseInt(limit) || 20)
     res.json({ success: true, data })
   } catch (e) {
@@ -24,6 +35,10 @@ router.get('/orgs', async (req, res) => {
 // GET /api/darkmoney/trace/:committeeId
 router.get('/trace/:committeeId', async (req, res) => {
   try {
+    if (useSupabase(req)) {
+      const data = await sbDarkMoney.traceDarkMoneyFlow(req.params.committeeId)
+      return res.json({ success: true, source: 'supabase', data })
+    }
     const data = await traceDarkMoneyFlow(req.params.committeeId)
     res.json({ success: true, data })
   } catch (e) {
@@ -35,6 +50,10 @@ router.get('/trace/:committeeId', async (req, res) => {
 // GET /api/darkmoney/candidate/:id/exposure
 router.get('/candidate/:id/exposure', async (req, res) => {
   try {
+    if (useSupabase(req)) {
+      const data = await sbDarkMoney.getCandidateDarkMoneyExposure(req.params.id)
+      return res.json({ success: true, source: 'supabase', data })
+    }
     const data = await getCandidateDarkMoneyExposure(req.params.id)
     res.json({ success: true, data })
   } catch (e) {
@@ -46,6 +65,10 @@ router.get('/candidate/:id/exposure', async (req, res) => {
 // GET /api/darkmoney/candidate/:id/infer
 router.get('/candidate/:id/infer', async (req, res) => {
   try {
+    if (useSupabase(req)) {
+      const data = await sbDarkMoney.inferFundingSource(req.params.id)
+      return res.json({ success: true, source: 'supabase', data, disclaimer: 'Analytical inference — not legal conclusion.' })
+    }
     const data = await inferFundingSource(req.params.id)
     res.json({
       success: true,
@@ -59,10 +82,13 @@ router.get('/candidate/:id/infer', async (req, res) => {
 })
 
 // GET /api/darkmoney/flow?cycle=2024
-// Returns Sankey-compatible flow diagram data
 router.get('/flow', async (req, res) => {
   try {
     const { cycle } = req.query
+    if (useSupabase(req)) {
+      const data = await sbDarkMoney.getDarkMoneyFlowData(cycle ? parseInt(cycle) : null)
+      return res.json({ success: true, source: 'supabase', data })
+    }
     const data = await getDarkMoneyFlowData(cycle ? parseInt(cycle) : null)
     res.json({ success: true, data })
   } catch (e) {
@@ -75,18 +101,21 @@ router.get('/flow', async (req, res) => {
 router.get('/organizations/index', async (req, res) => {
   try {
     const { limit, level } = req.query
-    let orgs = await getDarkMoneyOrgs(parseInt(limit) || 50)
+    let orgs
+    if (useSupabase(req)) {
+      orgs = await sbDarkMoney.getDarkMoneyOrgs(parseInt(limit) || 50)
+    } else {
+      orgs = await getDarkMoneyOrgs(parseInt(limit) || 50)
+    }
 
-    // Filter by disclosure level if requested
     if (level && ['dark', 'partial', 'disclosed'].includes(level)) {
       orgs = orgs.filter(o => o.disclosureLevel === level)
     }
-
-    // Sort by total spend descending
     orgs.sort((a, b) => (b.totalSpend || 0) - (a.totalSpend || 0))
 
     res.json({
       success: true,
+      source: useSupabase(req) ? 'supabase' : 'fec',
       data: orgs,
       summary: {
         total: orgs.length,

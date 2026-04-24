@@ -47,12 +47,14 @@ export const donors = {
     }).toString()
     return request(`/api/donors/committees?${qs}`)
   },
-  candidates:    ({ name, office, state, party, cycle, limit = 100, offset = 0, source } = {}) => {
+  candidates:    ({ name, office, state, party, cycle, limit = 100, offset = 0, source, sortBy, sortDir } = {}) => {
     const qs = new URLSearchParams({
       ...(name && { name }), ...(office && { office }), ...(state && { state }),
       ...(party && { party }), ...(cycle && { cycle }),
       limit, offset,
       ...(source && { source }),
+      ...(sortBy  && { sortBy }),
+      ...(sortDir && { sortDir }),
     }).toString()
     return request(`/api/donors/candidates?${qs}`)
   },
@@ -61,6 +63,10 @@ export const donors = {
   contributions: (id, { limit = 100, offset = 0, minAmount = 1000, source } = {}) => {
     const qs = new URLSearchParams({ limit, offset, minAmount, ...(source && { source }) }).toString()
     return request(`/api/donors/candidates/${id}/contributions?${qs}`)
+  },
+  candidateTopIndustries: (id, { cycle, limit = 15 } = {}) => {
+    const qs = new URLSearchParams({ ...(cycle && { cycle }), limit }).toString()
+    return request(`/api/donors/candidates/${id}/top-industries?${qs}`)
   },
   committeeContributions: (id, { limit = 100, offset = 0, minAmount = 1000, source } = {}) => {
     const qs = new URLSearchParams({ limit, offset, minAmount, ...(source && { source }) }).toString()
@@ -85,6 +91,30 @@ export const donors = {
       limit,
     }).toString()
     return request(`/api/donors/money-flow?${qs}`)
+  },
+  employers: ({ cycle, minAmount, limit = 100, sector } = {}) => {
+    const qs = new URLSearchParams({
+      ...(cycle     && { cycle }),
+      ...(minAmount && { minAmount }),
+      ...(sector    && { sector }),
+      limit,
+    }).toString()
+    return request(`/api/donors/employers?${qs}`)
+  },
+  employerFlow: (employerId, { cycle, limit = 50 } = {}) => {
+    const qs = new URLSearchParams({
+      ...(cycle && { cycle }),
+      limit,
+    }).toString()
+    return request(`/api/donors/employers/${encodeURIComponent(employerId)}/flow?${qs}`)
+  },
+  corporatePACs: ({ cycle, limit = 20, minAmount = 0 } = {}) => {
+    const qs = new URLSearchParams({ ...(cycle && { cycle }), limit, minAmount }).toString()
+    return request(`/api/donors/corporate-pacs?${qs}`)
+  },
+  corporatePACRecipients: (corpId, { cycle, limit = 15 } = {}) => {
+    const qs = new URLSearchParams({ ...(cycle && { cycle }), limit }).toString()
+    return request(`/api/donors/corporate-pacs/${encodeURIComponent(corpId)}/recipients?${qs}`)
   },
 }
 
@@ -175,7 +205,7 @@ export const stockAct = {
 
 // ── Dark Money ────────────────────────────────────────────────────────────────
 export const darkMoney = {
-  orgs:       (limit = 20) => request(`/api/darkmoney/orgs?limit=${limit}`),
+  orgs:       (limit = 20, cycle) => request(`/api/darkmoney/orgs?limit=${limit}${cycle ? `&cycle=${cycle}` : ''}`),
   trace:      (committeeId) => request(`/api/darkmoney/trace/${committeeId}`),
   exposure:   (candidateId) => request(`/api/darkmoney/candidate/${candidateId}/exposure`),
   infer:      (committeeId) => request(`/api/darkmoney/candidate/${committeeId}/infer`),
@@ -236,7 +266,7 @@ export const getAccountabilityLeaderboard = (chamber, party, limit) => corruptio
 export const getCompanyProfile            = (name)   => companies.profile(name)
 export const getCompanyPoliticalFootprint = (name)   => companies.politicalFootprint(name)
 export const getCompanyConflicts          = (name)   => companies.conflicts(name)
-export const getDarkMoneyOrgs             = (limit)  => darkMoney.orgs(limit)
+export const getDarkMoneyOrgs             = (limit, cycle) => darkMoney.orgs(limit, cycle)
 export const getDarkMoneyFlowData         = (cycle)  => darkMoney.flow(cycle)
 export const getRecentStockTrades         = (chamber, limit) => stockAct.recent(chamber, limit)
 export const getStockActWatchlist         = ()       => stockAct.watchlist()

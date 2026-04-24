@@ -15,8 +15,8 @@ export async function ingestPas2({ cycle, hotMinAmount = 0, dryRun = false }) {
 
   try {
     const zipPath = await downloadZip(url)
-    const txtPath = extractZip(zipPath, innerName)
-    const checksum = fileChecksum(zipPath)
+    const txtPath = await extractZip(zipPath, innerName)
+    const checksum = await fileChecksum(zipPath)
 
     const view = await openFecView({ filePath: txtPath, ...PAS2, viewName: 'pas2_raw' })
     const [{ count }] = await view.run(`SELECT COUNT(*) AS count FROM pas2_raw`)

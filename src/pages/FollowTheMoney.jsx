@@ -18,13 +18,19 @@ import { ORANGE, FONT_MONO as MF, FONT_SERIF as SF } from "../theme/tokens.js";
 import DarkMoneyTracker from "../components/DarkMoneyTracker.jsx";
 import LobbyistBundlers from "../components/LobbyistBundlers.jsx";
 import IndependentExpenditures from "../components/IndependentExpenditures.jsx";
+import EmployerLeaderboard from "../components/EmployerLeaderboard.jsx";
+import CorporatePACFlow from "../components/CorporatePACFlow.jsx";
+import CashFloodAnomalies from "../components/CashFloodAnomalies.jsx";
 
 const SUBTABS = [
-  { id: "intel",     label: "Donor Intelligence"              },
-  { id: "darkmoney", label: "Dark Money"                      },
-  { id: "web",       label: "Donor Web"                       },
-  { id: "bundlers",  label: "Lobbyist Bundlers",  badge: "NEW" },
-  { id: "ie",        label: "Indep. Expenditures",badge: "NEW" },
+  { id: "flow",      label: "Money Flow",          badge: "NEW" },
+  { id: "intel",     label: "Donor Intelligence"               },
+  { id: "darkmoney", label: "Dark Money"                       },
+  { id: "anomalies", label: "Cash Flood",           badge: "NEW" },
+  { id: "web",       label: "Donor Web"                        },
+  { id: "bundlers",  label: "Lobbyist Bundlers",   badge: "NEW" },
+  { id: "ie",        label: "Indep. Expenditures", badge: "NEW" },
+  { id: "corpacs",   label: "Corporate PACs",      badge: "NEW" },
 ];
 
 function SubTabBar({ tabs, active, onChange }) {
@@ -54,7 +60,7 @@ function SubTabBar({ tabs, active, onChange }) {
 
 export default function FollowTheMoney({ DonorIntel, DonorWeb, theme }) {
   const t = useTheme();
-  const [sub, setSub] = useState("intel");
+  const [sub, setSub] = useState("flow");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
@@ -73,11 +79,14 @@ export default function FollowTheMoney({ DonorIntel, DonorWeb, theme }) {
 
       <SubTabBar tabs={SUBTABS} active={sub} onChange={setSub} />
 
+      {sub === "flow"      && <EmployerLeaderboard />}
       {sub === "intel"     && DonorIntel && <DonorIntel />}
       {sub === "darkmoney" && <DarkMoneyTracker />}
+      {sub === "anomalies" && <CashFloodAnomalies />}
       {sub === "web"       && DonorWeb && <DonorWeb />}
       {sub === "bundlers"  && <LobbyistBundlers />}
       {sub === "ie"        && <IndependentExpenditures />}
+      {sub === "corpacs"   && <CorporatePACFlow />}
     </div>
   );
 }

@@ -1,0 +1,104 @@
+name: Bulk Ingest — FEC
+
+# Weekly: Monday 06:00 UTC (active cycle)
+# Manual trigger for backfills: workflow_dispatch with cycle + source parameters
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Weekly on Mondays
+  workflow_dispatch:
+    inputs:
+      cycle:
+        description: 'FEC cycle year (e.g. 2024 or 2026)'
+        required: false
+        default: '2026'
+      source:
+        description: 'Source name, or "all" for full phase 1–4 run'
+        required: false
+        default: 'all'
+      hot_min_amount:
+        description: 'Min $ for hot-tier contributions (default 2000)'
+        required: false
+        default: '2000'
+      dry_run:
+        description: 'Dry run — parse only, skip writes (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  ingest:
+    name: FEC bulk ingest
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 6 hours — itcont is large
+
+    env:
+      SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY:${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      R2_ACCOUNT_ID:            ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID:         ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY:     ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET:                ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT:              ${{ secrets.R2_ENDPOINT }}
+      BULK_TMP_DIR:             /tmp/unredacted-bulk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set run parameters
+        id: params
+        run: |
+          CYCLE="${{ github.event.inputs.cycle || '2026' }}"
+          SOURCE="${{ github.event.inputs.source || 'all' }}"
+          HOT_MIN="${{ github.event.inputs.hot_min_amount || '2000' }}"
+          DRY="${{ github.event.inputs.dry_run || 'false' }}"
+          echo "cycle=$CYCLE" >> $GITHUB_OUTPUT
+          echo "source=$SOURCE" >> $GITHUB_OUTPUT
+          echo "hot_min=$HOT_MIN" >> $GITHUB_OUTPUT
+          echo "dry_run=$DRY" >> $GITHUB_OUTPUT
+
+      - name: Run FEC ingest — Phase 1–4
+        run: |
+          CYCLE="${{ steps.params.outputs.cycle }}"
+          SOURCE="${{ steps.params.outputs.source }}"
+          HOT_MIN="${{ steps.params.outputs.hot_min }}"
+          DRY="${{ steps.params.outputs.dry_run }}"
+
+          FLAGS="--hot-min-amount $HOT_MIN"
+          if [ "$DRY" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
+
+          if [ "$SOURCE" = "all" ]; then
+            node etl/bulk/run.js --all --cycle $CYCLE $FLAGS
+          else
+            node etl/bulk/run.js --source $SOURCE --cycle $CYCLE $FLAGS
+          fi
+
+      - name: Refresh money_flow_edges MV
+        if: ${{ steps.params.outputs.dry_run != 'true' }}
+        run: |
+          # Use Supabase REST API to call a stored procedure that refreshes the MV.
+          # If no RPC exists yet, this step is a no-op.
+          curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "$SUPABASE_URL/rest/v1/rpc/refresh_money_flow_edges" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}' || true
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fec-ingest-log-${{ steps.params.outputs.cycle }}-${{ github.run_id }}
+          path: /tmp/unredacted-bulk/*.log
+          retention-days: 14
+          if-no-files-found: ignore

@@ -8,7 +8,7 @@ import {
   findQuidProQuoPaths,
   getTopContractorsByAgency,
   findRegulatoryPatterns,
-} from './graphQueries.js'
+} from './graphService.js'
 import {
   getCachedCorruptionScore,
   cacheCorruptionScore,

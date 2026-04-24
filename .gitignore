@@ -44,3 +44,6 @@ playwright-report/
 logs/
 *.log
 .vercel
+
+# ── Git worktrees ─────────────────────────────────────────────────────────────
+.worktrees/

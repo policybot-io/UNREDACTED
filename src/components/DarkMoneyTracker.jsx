@@ -71,6 +71,8 @@ function FlowDiagram({ nodes, links, t }) {
   )
 }
 
+const CYCLES = ['2024', '2026']
+
 export default function DarkMoneyTracker() {
   const t = useTheme()
 
@@ -81,6 +83,7 @@ export default function DarkMoneyTracker() {
   const [activeTab, setActiveTab] = useState('orgs')
   const [selectedOrg, setSelectedOrg] = useState(null)
   const [filterLevel, setFilterLevel] = useState('ALL')
+  const [cycle, setCycle]         = useState('2024')
 
   useEffect(() => {
     async function load() {
@@ -88,8 +91,8 @@ export default function DarkMoneyTracker() {
       setError(null)
       try {
         const [orgsRes, flowRes] = await Promise.allSettled([
-          getDarkMoneyOrgs(),
-          getDarkMoneyFlowData(),
+          getDarkMoneyOrgs(20, cycle),
+          getDarkMoneyFlowData(cycle),
         ])
         if (orgsRes.status === 'fulfilled') setOrgs(orgsRes.value?.data || [])
         if (flowRes.status === 'fulfilled') setFlowData(flowRes.value?.data || { nodes: [], links: [] })
@@ -99,7 +102,7 @@ export default function DarkMoneyTracker() {
       }
     }
     load()
-  }, [])
+  }, [cycle])
 
   const filtered      = orgs.filter(o => filterLevel === 'ALL' || o.disclosureLevel === filterLevel)
   const totalDark      = orgs.filter(o => o.disclosureLevel === 'dark')     .reduce((s, o) => s + (o.totalSpend || 0), 0)
@@ -129,6 +132,20 @@ export default function DarkMoneyTracker() {
 
   return (
     <div style={{ fontFamily: MF }}>
+      {/* Cycle filter */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <label style={{ fontFamily: MF, fontSize: 10, color: t.mid, display: 'flex', alignItems: 'center', gap: 5 }}>
+          ELECTION CYCLE
+          <select
+            value={cycle}
+            onChange={e => setCycle(e.target.value)}
+            style={{ background: t.card, color: t.hi, border: `1px solid ${t.border}`, padding: '5px 8px', fontFamily: MF, fontSize: 10, borderRadius: 3 }}
+          >
+            {CYCLES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+      </div>
+
       {/* Subtitle note */}
       <p style={{ margin: '0 0 8px', color: t.mid, fontSize: 13 }}>
         Super PACs and 501(c)(4) organizations from FEC public records.

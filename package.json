@@ -33,12 +33,12 @@
     "cors": "^2.8.6",
     "d3": "^7.9.0",
     "dotenv": "^17.3.1",
+    "duckdb": "^1.4.4",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "graphology": "^0.25.4",
     "groq-sdk": "^0.37.0",
     "maplibre-gl": "^4.7.1",
-    "neo4j-driver": "^6.0.1",
     "node-cache": "^5.1.2",
     "openai": "^4.104.0",
     "pmtiles": "^4.4.0",
@@ -47,7 +47,8 @@
     "recharts": "^3.8.0",
     "rss-parser": "^3.13.0",
     "supercluster": "^8.0.1",
-    "topojson-client": "^3.1.0"
+    "topojson-client": "^3.1.0",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

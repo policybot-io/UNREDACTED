@@ -1,9 +1,8 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import { rateLimit } from 'express-rate-limit'
 import { buildOpenApiSpec, renderSwaggerUi } from './openapi.js'
-dotenv.config()
 
 import spendingRouter from './routes/spending.js'
 import policyRouter from './routes/policy.js'

@@ -17,13 +17,17 @@ import { useTheme } from "../theme/index.js";
 import { ORANGE, FONT_MONO as MF, FONT_SERIF as SF } from "../theme/tokens.js";
 import CompanyProfile from "../components/CompanyProfile.jsx";
 import EnergyIntelligence from "../components/EnergyIntelligence.jsx";
+import SelfDealing from "../components/SelfDealing.jsx";
+import PayToPlay from "../components/PayToPlay.jsx";
 
 const SUBTABS = [
-  { id: "spending",  label: "Agency Spending"   },
-  { id: "contracts", label: "Contract Awards"   },
-  { id: "index",     label: "Corporate Index"   },
-  { id: "profile",   label: "Company Profile"   },
-  { id: "energy",    label: "Energy Intel", badge: "NEW" },
+  { id: "spending",     label: "Agency Spending"             },
+  { id: "contracts",    label: "Contract Awards"             },
+  { id: "selfdealing",  label: "Self-Dealing",  badge: "NEW" },
+  { id: "paytoplay",    label: "Pay-to-Play",   badge: "NEW" },
+  { id: "index",        label: "Corporate Index"             },
+  { id: "profile",      label: "Company Profile"             },
+  { id: "energy",       label: "Energy Intel",  badge: "NEW" },
 ];
 
 // ─── Shared data (moved from App.jsx) ─────────────────────────────────────────
@@ -270,11 +274,13 @@ export default function BudgetContracts({ theme }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
       <SubTabBar tabs={SUBTABS} active={sub} onChange={setSub} />
-      {sub === "spending"  && <AgencySpending />}
-      {sub === "contracts" && <ContractAwards theme={theme} />}
-      {sub === "index"     && <CorporateIndex />}
-      {sub === "profile"   && <CompanyProfile theme={theme} />}
-      {sub === "energy"    && <EnergyIntelligence />}
+      {sub === "spending"    && <AgencySpending />}
+      {sub === "contracts"   && <ContractAwards theme={theme} />}
+      {sub === "selfdealing" && <SelfDealing />}
+      {sub === "paytoplay"   && <PayToPlay />}
+      {sub === "index"       && <CorporateIndex />}
+      {sub === "profile"     && <CompanyProfile theme={theme} />}
+      {sub === "energy"      && <EnergyIntelligence />}
     </div>
   );
 }

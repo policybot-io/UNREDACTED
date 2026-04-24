@@ -1,141 +1,134 @@
-import { useState } from "react";
-import { useTheme } from "../theme/index.js";
-import { ORANGE, FONT_MONO as MF, FONT_SERIF as SF } from "../theme/tokens.js";
+import { useState, useEffect } from 'react'
+import { useTheme } from '../theme/index.js'
 
-// FEC lobbyist bundler data — registered lobbyists who bundle contributions
-// FEC API: /committees/{id}/bundled_contributions/ and /schedules/schedule_a/ w/ occupation filter
-// Shown with illustrative data reflecting real patterns
+// Story D: Bundler networks & industry capture.
+// Registered lobbyists who bundle contributions to the lawmakers who oversee
+// their clients — the most direct link between corporate lobbying and campaign finance.
+// Real data from Supabase (fec-lobbyist-bundles ingest).
+//
+// Journalist lead: sort by bundled_amount descending, then look for lobbyist_registrant_id
+// → cross-reference with LDA (Lobbying Disclosure Act) database to find their clients.
 
-const BUNDLERS = [
-  { name: "James A. Courtney", firm: "Brownstein Hyatt Farber", clients: ["Lockheed Martin","Raytheon","Boeing"], bundled: 2840000, cycle: "2024", beneficiary: "Sen. Armed Services Cmte members", industry: "Defence" },
-  { name: "Patricia E. Lombardi", firm: "Akin Gump Strauss Hauer", clients: ["PhRMA","Pfizer","AbbVie"], bundled: 1920000, cycle: "2024", beneficiary: "Senate HELP Cmte members", industry: "Pharma" },
-  { name: "Robert K. Williams", firm: "Squire Patton Boggs", clients: ["JPMorgan Chase","Goldman Sachs","Visa"], bundled: 3100000, cycle: "2024", beneficiary: "Senate Banking Cmte members", industry: "Finance" },
-  { name: "Sarah M. Thornton", firm: "Holland & Knight", clients: ["Chevron","ExxonMobil","NextEra"], bundled: 1650000, cycle: "2024", beneficiary: "Senate Energy Cmte members", industry: "Energy" },
-  { name: "David C. Prentiss", firm: "Covington & Burling", clients: ["Amazon","Google","Meta","Microsoft"], bundled: 2250000, cycle: "2024", beneficiary: "Senate Commerce Cmte members", industry: "Tech" },
-  { name: "Jennifer L. Harkins", firm: "Cornerstone Government Affairs", clients: ["UnitedHealth","Humana","CVS"], bundled: 1380000, cycle: "2024", beneficiary: "House Ways & Means members", industry: "Health" },
-  { name: "Michael T. Rafferty", firm: "K&L Gates", clients: ["Northrop Grumman","General Dynamics"], bundled: 1890000, cycle: "2024", beneficiary: "House Armed Services Cmte", industry: "Defence" },
-  { name: "Catherine O. Prescott", firm: "Williams & Jensen", clients: ["Bank of America","Citigroup","Wells Fargo"], bundled: 1440000, cycle: "2024", beneficiary: "Senate Banking Cmte members", industry: "Finance" },
-];
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
-const INDUSTRY_COLOR = {
-  "Defence": ORANGE, "Pharma": "#CC44AA", "Finance": "#4A7FFF",
-  "Energy": "#FFB84D", "Tech": "#00AADD", "Health": "#22c55e",
-};
+async function fetchBundles({ candidateId, committeeId, cycle, limit = 100 } = {}) {
+  const params = new URLSearchParams({ limit })
+  if (candidateId) params.set('candidate_id', candidateId)
+  if (committeeId) params.set('committee_id', committeeId)
+  if (cycle)       params.set('cycle', cycle)
+  const res = await fetch(`${API_BASE}/api/spending/lobbyist-bundles?${params}`)
+  if (!res.ok) throw new Error(`Bundles fetch failed: ${res.status}`)
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error || 'Unknown error')
+  return json.data || []
+}
 
-export default function LobbyistBundlers() {
-  const t = useTheme();
-  const [filterIndustry, setFilterIndustry] = useState("ALL");
-  const [expanded, setExpanded] = useState(null);
+function fmtMoney(n) {
+  if (!n && n !== 0) return '—'
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
+}
 
-  const industries = ["ALL", ...new Set(BUNDLERS.map(b => b.industry))];
-  const filtered = BUNDLERS.filter(b => filterIndustry === "ALL" || b.industry === filterIndustry)
-    .sort((a, b) => b.bundled - a.bundled);
+export default function LobbyistBundlers({ candidateId, committeeId, cycle: propCycle }) {
+  const t = useTheme()
+  const [rows, setRows]       = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+  const [search, setSearch]   = useState('')
+  const [cycle, setCycle]     = useState(propCycle || 2026)
 
-  const fmt = (n) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${(n / 1e3).toFixed(0)}K`;
-  const totalBundled = filtered.reduce((s, b) => s + b.bundled, 0);
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    fetchBundles({ candidateId, committeeId, cycle })
+      .then(data => { setRows(data); setLoading(false) })
+      .catch(err  => { setError(err.message); setLoading(false) })
+  }, [candidateId, committeeId, cycle])
+
+  const filtered = rows.filter(r => {
+    if (!search) return true
+    const s = search.toLowerCase()
+    return (
+      (r.lobbyist_name          || '').toLowerCase().includes(s) ||
+      (r.lobbyist_registrant_id || '').toLowerCase().includes(s) ||
+      (r.candidate_id           || '').toLowerCase().includes(s) ||
+      (r.committee_id           || '').toLowerCase().includes(s)
+    )
+  })
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ borderTop: `3px solid ${ORANGE}`, paddingTop: 16 }}>
-        <div style={{ fontFamily: MF, fontSize: 9, color: ORANGE, letterSpacing: 3, marginBottom: 8 }}>
-          FEC SCHEDULE A · LOBBYIST BUNDLERS · 2024 CYCLE
-        </div>
-        <h2 style={{ fontFamily: SF, fontSize: 28, color: t.hi, fontWeight: 700, lineHeight: 1.1, marginBottom: 6 }}>
+    <div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <h6 style={{ margin: 0, flexGrow: 1, color: t.hi, fontSize: '1rem', fontWeight: 600 }}>
           Lobbyist Bundlers
-        </h2>
-        <p style={{ fontFamily: SF, fontSize: 13, fontStyle: "italic", color: t.mid, lineHeight: 1.7, maxWidth: 640 }}>
-          Registered lobbyists who bundle individual contributions from their clients and networks to candidates they seek to influence.
-          This is the most direct link between corporate lobbying clients and congressional campaign finance.
+        </h6>
+        <select
+          value={cycle}
+          onChange={e => setCycle(Number(e.target.value))}
+          style={{ background: t.inputBg, color: t.hi, border: `1px solid ${t.border}`, borderRadius: 4, padding: '4px 8px', fontSize: '0.85rem' }}
+        >
+          <option value={2026}>2026</option>
+          <option value={2024}>2024</option>
+          <option value={2022}>2022</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Search lobbyist, registrant ID, candidate…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ background: t.inputBg, color: t.hi, border: `1px solid ${t.border}`, borderRadius: 4, padding: '5px 10px', fontSize: '0.85rem', minWidth: 260 }}
+        />
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '24px 0', color: t.mid }}>Loading…</div>
+      )}
+
+      {error && (
+        <div style={{ background: t.card, border: `1px solid ${t.warn}`, borderRadius: 4, padding: '10px 14px', color: t.warn, marginBottom: 12, fontSize: '0.875rem' }}>
+          {error.includes('Failed') || error.includes('fetch')
+            ? <>Data not yet available — run <code>fec-lobbyist-bundles</code> ingest for cycle {cycle}.</>
+            : error}
+        </div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
+        <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 4, padding: '10px 14px', color: t.mid, fontSize: '0.875rem' }}>
+          No lobbyist bundling records found for this filter.
+        </div>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            <thead>
+              <tr style={{ background: t.cardB, borderBottom: `1px solid ${t.border}` }}>
+                {['Lobbyist / Registrant','Registrant ID','Committee','Candidate','Bundled','Period','Cycle'].map(h => (
+                  <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: t.mid, fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.slice(0, 200).map((r, i) => (
+                <tr key={r.sub_id || i} style={{ borderBottom: `1px solid ${t.border}`, background: i % 2 === 0 ? t.card : t.tableAlt }}>
+                  <td style={{ padding: '5px 10px', fontWeight: 500, color: t.hi }}>{r.lobbyist_name || '—'}</td>
+                  <td style={{ padding: '5px 10px', fontFamily: 'monospace', fontSize: '0.72rem', color: t.mid }}>{r.lobbyist_registrant_id || '—'}</td>
+                  <td style={{ padding: '5px 10px', fontFamily: 'monospace', fontSize: '0.72rem', color: t.mid }}>{r.committee_id || '—'}</td>
+                  <td style={{ padding: '5px 10px', fontFamily: 'monospace', fontSize: '0.72rem', color: t.mid }}>{r.candidate_id || '—'}</td>
+                  <td style={{ padding: '5px 10px', fontWeight: 600, color: t.accent }}>{fmtMoney(r.bundled_amount)}</td>
+                  <td style={{ padding: '5px 10px', color: t.mid }}>{r.report_period || '—'}</td>
+                  <td style={{ padding: '5px 10px', color: t.mid }}>{r.cycle}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {filtered.length > 200 && (
+        <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: t.low }}>
+          Showing top 200 of {filtered.length} records. Use candidate/committee filters to narrow.
         </p>
-      </div>
-
-      {/* Industry filter */}
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontFamily: MF, fontSize: 9, color: t.low, letterSpacing: 1, marginRight: 4 }}>FILTER:</span>
-        {industries.map(ind => {
-          const color = INDUSTRY_COLOR[ind] || t.mid;
-          return (
-            <button key={ind} onClick={() => setFilterIndustry(ind)} style={{
-              background: filterIndustry === ind ? (INDUSTRY_COLOR[ind] || ORANGE) + "22" : t.cardB,
-              border: `1px solid ${filterIndustry === ind ? (INDUSTRY_COLOR[ind] || ORANGE) : t.border}`,
-              color: filterIndustry === ind ? (INDUSTRY_COLOR[ind] || ORANGE) : t.mid,
-              padding: "4px 12px", fontFamily: MF, fontSize: 9, cursor: "pointer",
-            }}>
-              {ind}
-            </button>
-          );
-        })}
-        <span style={{ marginLeft: "auto", fontFamily: MF, fontSize: 9, color: t.low }}>
-          {filtered.length} bundler{filtered.length !== 1 ? "s" : ""} · {fmt(totalBundled)} total
-        </span>
-      </div>
-
-      {/* Bundlers list */}
-      <div style={{ background: t.card, border: `1px solid ${t.border}` }}>
-        <div style={{ background: t.cardB, padding: "7px 14px", borderBottom: `2px solid ${t.border}`, display: "grid", gridTemplateColumns: "1fr 160px 120px 120px", gap: 12 }}>
-          {["BUNDLER / FIRM", "INDUSTRY", "BUNDLED", "BENEFICIARY"].map(h => (
-            <div key={h} style={{ fontFamily: MF, fontSize: 8, color: t.low, letterSpacing: 2 }}>{h}</div>
-          ))}
-        </div>
-        {filtered.map((b, i) => {
-          const color = INDUSTRY_COLOR[b.industry] || t.mid;
-          const isOpen = expanded === i;
-          return (
-            <div key={i}>
-              <div
-                onClick={() => setExpanded(isOpen ? null : i)}
-                style={{
-                  padding: "12px 14px", borderBottom: `1px solid ${t.border}`,
-                  background: isOpen ? color + "0A" : i % 2 === 0 ? t.card : t.tableAlt,
-                  display: "grid", gridTemplateColumns: "1fr 160px 120px 120px", gap: 12,
-                  alignItems: "center", cursor: "pointer", transition: "background .12s",
-                  borderLeft: isOpen ? `3px solid ${color}` : `3px solid transparent`,
-                }}>
-                <div>
-                  <div style={{ fontFamily: MF, fontSize: 10.5, color: t.hi }}>{b.name}</div>
-                  <div style={{ fontFamily: MF, fontSize: 9, color: t.mid, marginTop: 2 }}>{b.firm}</div>
-                </div>
-                <div>
-                  <span style={{ fontFamily: MF, fontSize: 9, color, border: `1px solid ${color}44`, padding: "2px 8px" }}>
-                    {b.industry}
-                  </span>
-                </div>
-                <div style={{ fontFamily: MF, fontSize: 13, color: ORANGE, fontWeight: 700 }}>{fmt(b.bundled)}</div>
-                <div style={{ fontFamily: MF, fontSize: 9, color: t.mid, lineHeight: 1.4 }}>{b.beneficiary}</div>
-              </div>
-              {isOpen && (
-                <div style={{ padding: "12px 14px 14px 17px", borderBottom: `1px solid ${t.border}`, background: color + "08", borderLeft: `3px solid ${color}` }}>
-                  <div style={{ fontFamily: MF, fontSize: 8.5, color: color, letterSpacing: 1.5, marginBottom: 8 }}>LOBBYING CLIENTS</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {b.clients.map(c => (
-                      <span key={c} style={{ fontFamily: MF, fontSize: 10, color: t.hi, background: t.cardB, border: `1px solid ${t.border}`, padding: "4px 10px" }}>
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                  <div style={{ fontFamily: SF, fontStyle: "italic", fontSize: 11, color: t.mid, lineHeight: 1.6, marginTop: 10 }}>
-                    As a registered lobbyist, {b.name.split(" ")[0]} represents {b.clients.slice(0, 2).join(" and ")} before
-                    Congress — while simultaneously bundling {fmt(b.bundled)} to the legislators who oversee those clients.
-                    This creates a direct financial relationship between lobbying clients and their congressional overseers.
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ background: t.card, border: `1px solid ${ORANGE}33`, borderLeft: `3px solid ${ORANGE}`, padding: "10px 14px" }}>
-        <div style={{ fontFamily: MF, fontSize: 8.5, color: ORANGE, letterSpacing: 1, marginBottom: 4 }}>◈ LIVE DATA INTEGRATION</div>
-        <div style={{ fontFamily: MF, fontSize: 9, color: t.mid, lineHeight: 1.6 }}>
-          Displaying illustrative data reflecting real patterns from FEC Schedule A filings. Live lobbyist bundler integration is in development.
-          Data sourced from: FEC bundled contribution reports, LD-203 lobbyist disclosure filings, OpenSecrets bundler database.
-        </div>
-      </div>
-
-      <div style={{ fontFamily: MF, fontSize: 8.5, color: t.low, borderTop: `1px solid ${t.border}`, paddingTop: 10 }}>
-        Sources: FEC Schedule A · LD-203 Lobbyist Disclosure · OpenSecrets Bundler Database · 2024 election cycle
-      </div>
+      )}
     </div>
-  );
+  )
 }

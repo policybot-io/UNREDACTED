@@ -1,0 +1,114 @@
+name: Bulk Ingest — USASpending
+
+# Monthly full archive: 1st of month at 07:00 UTC
+# Weekly delta: Mondays 08:00 UTC (1 hour after FEC run completes)
+# Manual trigger for full fiscal-year backfills
+
+on:
+  schedule:
+    - cron: '0 7 1 * *'   # Monthly full archive
+    - cron: '0 8 * * 1'   # Weekly delta
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '"full" (monthly archive) or "delta" (recent changes)'
+        required: false
+        default: 'delta'
+      fiscal_year:
+        description: 'Fiscal year for full mode (e.g. 2024)'
+        required: false
+        default: '2024'
+      days_back:
+        description: 'Days back for delta mode (default 14)'
+        required: false
+        default: '14'
+      award_class:
+        description: '"contracts", "assistance", or "both"'
+        required: false
+        default: 'both'
+      dry_run:
+        description: 'Dry run — parse only, skip writes (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  ingest:
+    name: USASpending bulk ingest
+    runs-on: ubuntu-latest
+    timeout-minutes: 480   # 8 hours — full FY archives are large
+
+    env:
+      SUPABASE_URL:             ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY:${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      R2_ACCOUNT_ID:            ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID:         ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY:     ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET:                ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT:              ${{ secrets.R2_ENDPOINT }}
+      BULK_TMP_DIR:             /tmp/unredacted-bulk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Detect run mode
+        id: mode
+        run: |
+          # On schedule: 1st of month = full, otherwise = delta
+          DAY=$(date +%d)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODE="${{ github.event.inputs.mode || 'delta' }}"
+          elif [ "$DAY" = "01" ]; then
+            MODE="full"
+          else
+            MODE="delta"
+          fi
+          echo "mode=$MODE" >> $GITHUB_OUTPUT
+          echo "fiscal_year=${{ github.event.inputs.fiscal_year || '2024' }}" >> $GITHUB_OUTPUT
+          echo "days_back=${{ github.event.inputs.days_back || '14' }}" >> $GITHUB_OUTPUT
+          echo "award_class=${{ github.event.inputs.award_class || 'both' }}" >> $GITHUB_OUTPUT
+          DRY="${{ github.event.inputs.dry_run || 'false' }}"
+          echo "dry_run=$DRY" >> $GITHUB_OUTPUT
+
+      - name: Run full archive ingest
+        if: ${{ steps.mode.outputs.mode == 'full' }}
+        run: |
+          FY="${{ steps.mode.outputs.fiscal_year }}"
+          DRY="${{ steps.mode.outputs.dry_run }}"
+          CLASS="${{ steps.mode.outputs.award_class }}"
+          FLAGS=""
+          if [ "$DRY" = "true" ]; then FLAGS="--dry-run"; fi
+
+          if [ "$CLASS" = "contracts" ] || [ "$CLASS" = "both" ]; then
+            node etl/bulk/run.js --source usa-contracts --fiscal-year $FY $FLAGS
+          fi
+          if [ "$CLASS" = "assistance" ] || [ "$CLASS" = "both" ]; then
+            node etl/bulk/run.js --source usa-assistance --fiscal-year $FY $FLAGS
+          fi
+
+      - name: Run delta ingest
+        if: ${{ steps.mode.outputs.mode == 'delta' }}
+        run: |
+          DAYS="${{ steps.mode.outputs.days_back }}"
+          DRY="${{ steps.mode.outputs.dry_run }}"
+          FLAGS="--days-back $DAYS"
+          if [ "$DRY" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
+          node etl/bulk/run.js --source usa-delta $FLAGS
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: usaspending-ingest-log-${{ github.run_id }}
+          path: /tmp/unredacted-bulk/*.log
+          retention-days: 14
+          if-no-files-found: ignore

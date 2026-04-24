@@ -173,6 +173,86 @@ export const OPPEXP = {
   },
 }
 
+// ─── Phase 4 schemas ─────────────────────────────────────────────────────────
+
+// FEC Schedule E — Independent Expenditures.
+// Bulk file: https://www.fec.gov/files/bulk-downloads/{cycle}/independent_expenditure{yy}.zip
+// See: https://www.fec.gov/campaign-finance-data/independent-expenditures-file-description/
+export const IE = {
+  columns: [
+    'CMTE_ID', 'AMNDT_IND', 'RPT_YR', 'RPT_TP', 'IMAGE_NUM', 'LINE_NUM',
+    'FORM_TP_CD', 'SCHED_TP_CD', 'CAND_ID', 'CAND_NM', 'CAND_PTY_AFFILIATION',
+    'CAND_OFFICE_DISTRICT', 'CAND_OFFICE_ST', 'CAND_OFFICE', 'CAND_ELECTION_YR',
+    'CATG_CD', 'CATG_DESC', 'S_O_IND', 'TRANSACTION_DT', 'TRANSACTION_AMT',
+    'PAYEE_NM', 'PAYEE_ST1', 'PAYEE_ST2', 'PAYEE_CITY', 'PAYEE_ST', 'PAYEE_ZIP',
+    'ENTITY_TP', 'ELECTION_TP', 'FECFILE_ELECTION_TP', 'FILE_NUM',
+    'TRAN_ID', 'BACK_REF_TRAN_ID', 'SUB_ID', 'ACTION_CD',
+  ],
+  types: {
+    RPT_YR:          'INTEGER',
+    CAND_ELECTION_YR:'INTEGER',
+    TRANSACTION_AMT: 'DOUBLE',
+    FILE_NUM:        'BIGINT',
+    SUB_ID:          'BIGINT',
+  },
+}
+
+// FEC Electioneering Communications.
+// Bulk file: https://www.fec.gov/files/bulk-downloads/{cycle}/electioneering{yy}.zip
+// See: https://www.fec.gov/campaign-finance-data/electioneering-communications-file-description/
+export const ELECTIONEERING = {
+  columns: [
+    'SUB_ID', 'CMTE_ID', 'CMTE_NM', 'RECEIPT_DT', 'FILED_DT',
+    'FIRST_LAST_ELECTION_DT', 'LAST_ELECTION_DT', 'ENTITY_TP',
+    'CAND_ID', 'CAND_NM', 'CAND_OFFICE', 'CAND_OFFICE_ST', 'CAND_OFFICE_DISTRICT',
+    'PAYEE_NM', 'PURPOSE', 'AMT_OF_COMM', 'FEC_ELECTION_YR',
+    'FILE_NUM', 'TRAN_ID',
+  ],
+  types: {
+    AMT_OF_COMM:     'DOUBLE',
+    FEC_ELECTION_YR: 'INTEGER',
+    FILE_NUM:        'BIGINT',
+    SUB_ID:          'BIGINT',
+  },
+}
+
+// FEC Communication Costs (corp/union direct communications).
+// Bulk file: https://www.fec.gov/files/bulk-downloads/{cycle}/comm_csts_ex{yy}.zip
+// See: https://www.fec.gov/campaign-finance-data/communication-costs-file-description/
+export const COMM_COSTS = {
+  columns: [
+    'CMTE_ID', 'AMNDT_IND', 'RPT_TP', 'IMAGE_NUM', 'LINE_NUM',
+    'FORM_TP_CD', 'SCHED_TP_CD', 'CAND_ID', 'CAND_NM', 'CAND_PTY_AFFILIATION',
+    'CAND_OFFICE_DISTRICT', 'CAND_OFFICE_ST', 'CAND_OFFICE', 'CAND_ELECTION_YR',
+    'CATG_CD', 'CATG_DESC', 'S_O_IND', 'TRANSACTION_DT', 'TRANSACTION_AMT',
+    'FILE_NUM', 'TRAN_ID', 'SUB_ID',
+  ],
+  types: {
+    CAND_ELECTION_YR:'INTEGER',
+    TRANSACTION_AMT: 'DOUBLE',
+    FILE_NUM:        'BIGINT',
+    SUB_ID:          'BIGINT',
+  },
+}
+
+// FEC Lobbyist/Registrant Bundled Contributions.
+// Bulk file: https://www.fec.gov/files/bulk-downloads/{cycle}/lobbyist_bundle{yy}.zip
+// See: https://www.fec.gov/campaign-finance-data/lobbyist-bundler-file-description/
+export const LOBBYIST_BUNDLE = {
+  columns: [
+    'CMTE_ID', 'CMTE_NM', 'LOBBYIST_REG_NM', 'REG_ID',
+    'CAND_ID', 'CAND_NM', 'BUNDLED_FROM_DT', 'BUNDLED_TO_DT',
+    'BUNDLED_AMT', 'CONTRIB_CNT', 'RPT_YR', 'RPT_TP',
+    'FILE_NUM', 'TRAN_ID', 'IMAGE_NUM',
+  ],
+  types: {
+    BUNDLED_AMT: 'DOUBLE',
+    CONTRIB_CNT: 'INTEGER',
+    RPT_YR:      'INTEGER',
+    FILE_NUM:    'BIGINT',
+  },
+}
+
 // FEC bulk file URL helper.
 // Pattern: https://www.fec.gov/files/bulk-downloads/{YYYY}/{prefix}{YY}.zip
 export function bulkUrl(prefix, cycle) {
