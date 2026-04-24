@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://unredacted.vercel.app/sitemap.xml
