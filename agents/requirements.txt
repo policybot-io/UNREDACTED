@@ -11,7 +11,7 @@ langgraph==0.2.62
 
 # Provider SDKs — install all so AI_PROVIDER can be switched via env var
 langchain-anthropic==0.3.3      # AI_PROVIDER=anthropic (default)
-langchain-openai==0.3.4         # AI_PROVIDER=deepseek or openai
+langchain-openai==1.1.14         # AI_PROVIDER=deepseek or openai
 langchain-groq==0.2.3           # AI_PROVIDER=groq
 
 # Underlying SDKs
